@@ -1,254 +1,138 @@
 # APARU QR Module
 
-Первая рабочая демо-версия QR-сценария заказа такси APARU.
+Репозиторий APARU QR Module сейчас находится в **documentation/reference-only** состоянии.
 
-Приложение моделирует мобильный flow, в котором пользователь:
-- сканирует QR-код в общественном месте,
-- попадает в web-приложение с уже определённой точкой отправления,
-- подтверждает номер телефона через SMS,
-- выбирает точку назначения,
-- подтверждает заказ,
-- видит статус поездки,
-- после завершения получает CTA на установку приложения APARU.
+Здесь больше **нет runnable приложения, страниц и frontend-кода**. По явному решению рабочая реализация была удалена, а в репозитории оставлены только материалы, которые описывают проект, визуальный язык и интеграционные фрагменты.
 
-## Что это сейчас
+## Что сейчас хранится в репозитории
 
-Это **frontend-first demo/MVP pass**, собранный так, чтобы:
-- быстро проверить пользовательский сценарий;
-- сохранить визуальный язык APARU;
-- использовать APARU Maps API как обязательную основу для гео-логики;
-- не закопать проект в оверинжиниринг;
-- оставить чистые швы под будущий backend на **FastAPI + PostgreSQL**.
+В репозитории сохранены:
+- проектная документация;
+- визуальный язык APARU;
+- архитектурные правила;
+- workflow-правила;
+- reference-артефакты по APARU Maps API.
 
-## Текущий стек
+## Текущее назначение репозитория
 
-- **Vite**
-- **React 18**
-- **TypeScript**
-- **React Router**
-- **Tailwind CSS**
-- **Leaflet / React Leaflet**
+Сейчас этот репозиторий — не приложение и не MVP, а **диспетчерская папка знаний о проекте**.
+Он нужен для того, чтобы:
+- хранить визуальные правила;
+- фиксировать архитектурные ориентиры;
+- хранить исходную документацию по APARU Maps API;
+- служить чистой точкой старта для будущей пересборки продукта.
 
-### Почему не Next.js
+## Что удалено
 
-Для текущего этапа нужен быстрый, прозрачный mobile-first frontend без реальной server-side логики.
-Так как production-backend планируется отдельно на **FastAPI/PostgreSQL**, Next.js на этом шаге добавлял бы больше рамки, чем пользы.
+Из репозитория удалены:
+- весь frontend/runtime-код;
+- все страницы;
+- `src/`
+- `public/`
+- `index.html`
+- `package.json`
+- `package-lock.json`
+- Vite / Tailwind / TypeScript config-файлы
+- всё, что относилось к запускаемому приложению
 
-## Основной сценарий
+Иными словами: **проект сейчас не запускается и не собирается**, потому что кодовая часть намеренно удалена.
 
-Реализованный flow:
-1. **QR landing** — вход по `/ride?point=<id>&lat=<lat>&lng=<lng>`
-2. **Phone verification** — ввод телефона +7 и SMS-кода
-3. **Order confirmation** — подтверждение заказа, тарифа и оплаты
-4. **Ride status** — этапы поездки в реальном времени через mock progression
-5. **Install CTA** — экран установки приложения после завершения поездки
-
-## Визуальный язык
-
-В проекте сохранены и зафиксированы правила визуального языка APARU:
-- `VISUAL_LANGUAGE.md`
-- `docs/visual-language.md`
-
-Ключевые принципы:
-- тёмный фон `#0D0D0D`
-- жёлтый акцент `#FFD700`
-- вторичный текст `#A0A0A0`
-- поверхности `#1A1A1A`
-- mobile-first
-- max width контента `480px`
-- крупные full-width CTA
-- спокойные анимации без лишнего шума
-
-## Архитектурные правила
-
-Зафиксированы в:
-- `docs/architecture-rules.md`
-- `docs/workflow-rules.md`
-
-Базовые принципы:
-- UI не должен напрямую знать transport-детали интеграций;
-- внешние API вынесены в service layer;
-- SMS и order flow пока mock, но за адаптерными швами;
-- код должен быть расширяемым под backend на FastAPI/PostgreSQL.
-
-## Структура проекта
+## Актуальная структура
 
 ```text
 .
+├── README.md
+├── VISUAL_LANGUAGE.md
 ├── docs/
+│   ├── architecture-rules.md
+│   ├── visual-language.md
+│   └── workflow-rules.md
 ├── integrations/
 │   └── aparu-maps/
-├── public/
-├── src/
-│   ├── app/
-│   ├── components/
-│   ├── features/
-│   ├── hooks/
-│   ├── lib/
-│   └── types/
-├── VISUAL_LANGUAGE.md
-├── package.json
-└── README.md
+│       ├── Aparu Maps API.postman_collection.json
+│       └── GeoApi.md
+└── .gitignore
 ```
-
-### По папкам
-
-- `src/app` — router и route entrypoints
-- `src/features/ride` — основной ride flow
-- `src/components` — UI-компоненты и карта
-- `src/hooks` — reusable hooks
-- `src/lib/services` — typed integration layer для APARU Maps API
-- `src/lib/sms.ts` — mock SMS service
-- `src/lib/order.ts` — mock order service
-- `src/lib/config` — env/config
-- `src/types` — доменные типы под будущие backend seams
-- `public` — статика, включая логотип APARU
-- `integrations/aparu-maps` — исходные артефакты и документация по APARU Maps API
 
 ## Важные файлы
 
-- `VISUAL_LANGUAGE.md` — краткая фиксация визуального языка
-- `docs/visual-language.md` — расширенные UI-правила
-- `docs/architecture-rules.md` — архитектурные ограничения и предпочтения
-- `docs/workflow-rules.md` — правила изменений и done criteria
-- `src/features/ride/RidePage.tsx` — основной пользовательский flow
-- `src/lib/services/aparu-maps.ts` — клиент APARU Maps API
-- `src/lib/sms.ts` — mock SMS
-- `src/lib/order.ts` — mock заказа
-- `src/lib/utils/ride-query.ts` — разбор QR query params
-- `public/aparu-logo.svg` — логотип APARU
+### Корневые
+- `README.md` — текущее описание состояния репозитория
+- `VISUAL_LANGUAGE.md` — краткая фиксация визуального языка APARU
 
-## Интеграция с APARU Maps API
+### Документация
+- `docs/visual-language.md` — расширенное описание визуального языка
+- `docs/architecture-rules.md` — архитектурные ограничения и принципы
+- `docs/workflow-rules.md` — правила работы с проектом
 
-В проекте обязательно используется APARU Maps API как база для гео-функций.
+### Интеграционные reference-материалы
+- `integrations/aparu-maps/GeoApi.md` — документация по APARU Maps API
+- `integrations/aparu-maps/Aparu Maps API.postman_collection.json` — Postman collection для APARU Maps API
 
-Сейчас заложены typed wrappers для:
-- `geocode`
-- `reverseGeocode`
-- `route`
-- seam под `tiles` config
+## Визуальный язык
 
-Исходные документы сохранены в репозитории:
-- `integrations/aparu-maps/GeoApi.md`
-- `integrations/aparu-maps/Aparu Maps API.postman_collection.json`
+На текущий момент в документации зафиксирован такой визуальный вектор:
+- light-first UI
+- фон: `#F7F7F5`
+- основные поверхности: `#FFFFFF`
+- мягко выделенные поверхности: `#FFF7ED`
+- акцент: `#FF8C00`
+- вторичный текст: `#71717A`
+- mobile-first
+- max-width: `480px`
+- без градиентов
+- без декоративного визуального шума
 
-## Переменные окружения
+Смотри:
+- `VISUAL_LANGUAGE.md`
+- `docs/visual-language.md`
 
-Создайте `.env` при необходимости на основе `.env.example`.
+## Архитектурный вектор
 
-```env
-VITE_APARU_MAPS_BASE_URL=http://testtaxi3.aparu.kz
-VITE_APARU_MAPS_API_KEY=test1
-```
+Хотя код удалён, в проекте всё ещё зафиксирован intended direction:
+- будущий frontend должен быть простым, mobile-first и без лишней магии;
+- APARU Maps API остаётся обязательной основой для geo-функций;
+- архитектура должна оставлять чистые швы под backend на **FastAPI + PostgreSQL**;
+- интеграции не должны быть размазаны по UI-слою.
 
-По умолчанию приложение использует те же значения, что заданы в документации для демо-режима.
+Подробности:
+- `docs/architecture-rules.md`
 
-## Как поднять проект для теста
+## Можно ли сейчас поднять проект?
 
-### 1. Установить зависимости
+Нет.
 
-```bash
-npm install
-```
+Сейчас репозиторий **не содержит исполняемого приложения**.
+Команд вида:
+- `npm install`
+- `npm run dev`
+- `npm run build`
 
-### 2. При необходимости создать `.env`
+здесь больше нет смысла использовать, потому что соответствующая кодовая база удалена.
 
-```bash
-cp .env.example .env
-```
+## Для чего это может быть полезно дальше
 
-### 3. Запустить dev server
-
-```bash
-npm run dev
-```
-
-После запуска откройте адрес, который покажет Vite (обычно `http://localhost:5173`).
-
-### 4. Открыть демо-сценарий
-
-Главный demo entrypoint:
-
-```text
-/ride?point=123&lat=49.9483&lng=82.6135
-```
-
-Полный пример локального URL:
-
-```text
-http://localhost:5173/ride?point=123&lat=49.9483&lng=82.6135
-```
-
-Также корневой маршрут `/` содержит кнопку быстрого входа в demo-flow.
-
-## Команды
-
-```bash
-npm run dev
-npm run typecheck
-npm run build
-npm run preview
-```
-
-### Что делает каждая команда
-
-- `npm run dev` — локальная разработка
-- `npm run typecheck` — проверка TypeScript без сборки
-- `npm run build` — production build + предварительный typecheck
-- `npm run preview` — локальный просмотр production build
-
-## Что уже работает
-
-- вход по QR query params
-- разбор `point`, `lat`, `lng`
-- определение/уточнение точки A через reverse geocode
-- ввод и валидация телефона в формате `+7`
-- mock SMS-код
-- ввод и валидация 4-значного кода
-- выбор точки B через geocode suggestions
-- расчёт route summary через APARU Maps API
-- выбор тарифа
-- выбор способа оплаты
-- mock создание заказа
-- mock progression статусов поездки
-- финальный CTA на App Store / Google Play
-
-## Известные ограничения
-
-Это важно, чтобы не путать demo и production:
-
-- **SMS не настоящая** — сейчас это mock service
-- **создание заказа не настоящее** — тоже mock
-- **нет backend persistence**
-- **нет авторизации/сессий production-уровня**
-- **нет полноценной интеграции с реальным taxi dispatch backend**
-- **нет e2e-тестов**
-- **кастомный APARU map style/tiles runtime ещё не доведён до полноценного UI-использования**
+Этот репозиторий в текущем виде годится как:
+- source of truth для визуального языка;
+- reference-хранилище по APARU Maps API;
+- подготовленная документная база перед новой сборкой проекта с нуля;
+- безопасная точка переосмысления продукта без хвоста старого кода.
 
 ## Что логично делать дальше
 
-Следующие разумные шаги:
-1. выделить backend API-контракты под FastAPI;
-2. спроектировать PostgreSQL-модели для ride/order/session flow;
-3. заменить mock SMS и mock order на реальные backend endpoints;
-4. довести карту до полноценного APARU map runtime;
-5. добавить e2e и component tests;
-6. определить production flow ошибок, retry и edge cases.
+Если проект будут пересобирать, разумный следующий порядок такой:
+1. уточнить продуктовый scope новой итерации;
+2. пересмотреть README/документацию под новую фазу;
+3. выбрать новую кодовую основу;
+4. заново собрать структуру приложения;
+5. подключить APARU Maps API уже в новом кодовом каркасе.
 
 ## Ветки
 
-Текущая рабочая реализация собрана в ветке:
-- `developing`
+- `main` — базовая ветка
+- `developing` — рабочая ветка, в которой зафиксировано текущее stripped-состояние
 
-Базовая стабильная стартовая ветка:
-- `main`
+## Важная пометка
 
-## Примечание
-
-Если меняется визуальный язык, архитектурные границы или правила работы с APARU Maps API, обновляйте не только код, но и:
-- `VISUAL_LANGUAGE.md`
-- `docs/visual-language.md`
-- `docs/architecture-rules.md`
-- `docs/workflow-rules.md`
-
-Иначе проектная память начнёт врать, а это дрянная привычка.
+Если репозиторий снова станет кодовым, README нужно будет снова обновить.
+Сейчас он намеренно описывает **документационный** статус, а не живое приложение.
