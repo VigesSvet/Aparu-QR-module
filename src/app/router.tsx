@@ -10,7 +10,7 @@ function HomePage() {
         <p className="text-sm text-aparu-muted">
           Мобильный сценарий заказа такси по QR. Для входа откройте маршрут
           {' '}
-          <code className="rounded bg-aparu-surface px-2 py-1 text-aparu-accent">/ride?point=123&lat=49.9483&lng=82.6135</code>
+          <code className="rounded bg-aparu-surface-elevated px-2 py-1 text-aparu-accent">/ride?point=123&lat=49.9483&lng=82.6135</code>
         </p>
       </div>
       <Link

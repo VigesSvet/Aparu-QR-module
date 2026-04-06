@@ -21,7 +21,7 @@ export default {
         button: 'var(--radius-button)'
       },
       boxShadow: {
-        glow: '0 20px 48px rgba(255, 215, 0, 0.12)'
+        glow: '0 12px 32px rgba(24, 24, 27, 0.08)'
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif']

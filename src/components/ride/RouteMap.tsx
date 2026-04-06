@@ -28,7 +28,7 @@ export function RouteMap({ pickup, destination, route }: RouteMapProps) {
         />
         <Marker position={[pickup.latitude, pickup.longitude]} />
         {destination ? <Marker position={[destination.latitude, destination.longitude]} /> : null}
-        {routeLine.length > 1 ? <Polyline positions={routeLine} pathOptions={{ color: '#ffd700', weight: 5, opacity: 0.85 }} /> : null}
+        {routeLine.length > 1 ? <Polyline positions={routeLine} pathOptions={{ color: '#ff8c00', weight: 5, opacity: 0.85 }} /> : null}
       </MapContainer>
     </div>
   );

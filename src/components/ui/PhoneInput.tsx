@@ -11,7 +11,7 @@ export function PhoneInput({ value, onChange, placeholder }: PhoneInputProps) {
       onChange={(event) => onChange(event.target.value)}
       inputMode="tel"
       placeholder={placeholder ?? '+7 (777) 123-45-67'}
-      className="w-full rounded-card border border-aparu-border bg-aparu-surface px-4 py-4 text-base text-aparu-text outline-none transition focus:border-aparu-accent"
+      className="w-full rounded-card border border-aparu-border bg-aparu-surface-elevated px-4 py-4 text-base text-aparu-text outline-none transition focus:border-aparu-accent"
     />
   );
 }

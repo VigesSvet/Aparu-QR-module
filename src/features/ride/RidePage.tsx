@@ -222,9 +222,9 @@ export function RidePage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[var(--content-width)] flex-col gap-4 px-4 py-6">
-      <header className="rounded-card border border-aparu-border bg-aparu-surface/80 p-5 shadow-glow backdrop-blur">
-        <div className="mb-4 flex items-center justify-between">
+    <main className="mx-auto flex min-h-screen w-full max-w-[var(--content-width)] flex-col gap-4 overflow-x-hidden px-4 py-6">
+      <header className="rounded-card border border-aparu-border bg-aparu-surface p-5 shadow-glow">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <img src="/aparu-logo.svg" alt="APARU" className="h-10 w-auto" />
           <span className="rounded-full bg-aparu-accentSoft px-3 py-1 text-xs font-semibold text-aparu-accent">QR point #{query.pointId}</span>
         </div>
@@ -249,7 +249,7 @@ export function RidePage() {
               value={destinationQuery}
               onChange={(event) => setDestinationQuery(event.target.value)}
               placeholder="Введите адрес или место"
-              className="w-full rounded-card border border-aparu-border bg-[#121212] px-4 py-4 text-aparu-text outline-none transition focus:border-aparu-accent"
+              className="w-full rounded-card border border-aparu-border bg-aparu-surface px-4 py-4 text-aparu-text outline-none transition focus:border-aparu-accent"
             />
             <div className="space-y-2">
               {destinationOptions.map((option) => (
@@ -261,7 +261,7 @@ export function RidePage() {
                     setDestinationQuery(option.label);
                     setDestinationOptions([]);
                   }}
-                  className={`w-full rounded-card border px-4 py-3 text-left transition ${destination?.id === option.id ? 'border-aparu-accent bg-aparu-accentSoft' : 'border-aparu-border bg-[#121212] hover:border-aparu-accent/50'}`}
+                  className={`w-full rounded-card border px-4 py-3 text-left transition ${destination?.id === option.id ? 'border-aparu-accent bg-aparu-accentSoft' : 'border-aparu-border bg-aparu-surface hover:border-aparu-accent/50'}`}
                 >
                   <div className="font-medium text-aparu-text">{option.label}</div>
                   <div className="text-xs text-aparu-muted">{option.subtitle}</div>
@@ -270,13 +270,13 @@ export function RidePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {TARIFFS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setTariff(item.id)}
-                className={`rounded-card border p-3 text-left transition ${tariff === item.id ? 'border-aparu-accent bg-aparu-accentSoft' : 'border-aparu-border bg-[#121212]'}`}
+                className={`flex min-w-0 flex-col rounded-card border p-3 text-left transition ${tariff === item.id ? 'border-aparu-accent bg-aparu-accentSoft' : 'border-aparu-border bg-aparu-surface-elevated'}`}
               >
                 <div className="font-semibold text-aparu-text">{item.title}</div>
                 <div className="mt-1 text-xs text-aparu-muted">{item.subtitle}</div>
@@ -285,20 +285,20 @@ export function RidePage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(['card', 'cash'] as PaymentMethod[]).map((method) => (
               <button
                 key={method}
                 type="button"
                 onClick={() => setPaymentMethod(method)}
-                className={`rounded-card border px-4 py-3 text-sm font-medium transition ${paymentMethod === method ? 'border-aparu-accent bg-aparu-accentSoft text-aparu-text' : 'border-aparu-border bg-[#121212] text-aparu-muted'}`}
+                className={`rounded-card border px-4 py-3 text-sm font-medium transition ${paymentMethod === method ? 'border-aparu-accent bg-aparu-accentSoft text-aparu-text' : 'border-aparu-border bg-aparu-surface-elevated text-aparu-muted'}`}
               >
                 {method === 'card' ? 'Карта' : 'Наличные'}
               </button>
             ))}
           </div>
 
-          <div className="rounded-card border border-aparu-border bg-[#121212] p-4">
+          <div className="rounded-card border border-aparu-border bg-aparu-surface-elevated p-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-aparu-muted">Оценка поездки</span>
               <span className="font-semibold text-aparu-accent">{fare} ₸</span>
@@ -339,7 +339,7 @@ export function RidePage() {
             onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 4))}
             inputMode="numeric"
             placeholder="4 цифры"
-            className="w-full rounded-card border border-aparu-border bg-[#121212] px-4 py-4 text-center text-2xl tracking-[0.35em] text-aparu-text outline-none transition focus:border-aparu-accent"
+            className="w-full rounded-card border border-aparu-border bg-aparu-surface-elevated px-4 py-4 text-center text-2xl tracking-[0.35em] text-aparu-text outline-none transition focus:border-aparu-accent"
           />
           <button
             type="button"
@@ -358,7 +358,7 @@ export function RidePage() {
           <h2 className="text-xl font-semibold">Проверьте заказ</h2>
           <AddressCard title="Откуда" label={rideDraft.pickup.label} subtitle={rideDraft.pickup.subtitle} badge="A" />
           <AddressCard title="Куда" label={rideDraft.destination.label} subtitle={rideDraft.destination.subtitle} badge="B" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SummaryCard label="Тариф" value={TARIFFS.find((item) => item.id === tariff)?.title ?? tariff} />
             <SummaryCard label="Оплата" value={paymentMethod === 'card' ? 'Картой' : 'Наличными'} />
             <SummaryCard label="Оценка" value={`${fare} ₸`} />
@@ -390,9 +390,9 @@ export function RidePage() {
               const activeIndex = STATUS_SEQUENCE.indexOf(order.status);
               const isDone = index <= activeIndex;
               return (
-                <div key={status} className={`flex gap-3 rounded-card border p-3 ${isDone ? 'border-aparu-accent/40 bg-aparu-accentSoft' : 'border-aparu-border bg-[#121212]'}`}>
+                <div key={status} className={`flex min-w-0 gap-3 rounded-card border p-3 ${isDone ? 'border-aparu-accent/40 bg-aparu-accentSoft' : 'border-aparu-border bg-aparu-surface-elevated'}`}>
                   <div className={`mt-1 h-3 w-3 rounded-full ${isDone ? 'bg-aparu-accent' : 'bg-aparu-border'}`} />
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-medium text-aparu-text">{STATUS_META[status].title}</div>
                     <div className="text-xs text-aparu-muted">{STATUS_META[status].text}</div>
                   </div>
@@ -402,7 +402,7 @@ export function RidePage() {
           </div>
 
           {order.driver ? (
-            <div className="rounded-card border border-aparu-border bg-[#121212] p-4">
+            <div className="rounded-card border border-aparu-border bg-aparu-surface-elevated p-4">
               <div className="text-sm font-semibold text-aparu-text">Ваш водитель</div>
               <div className="mt-2 text-lg font-semibold text-aparu-accent">{order.driver.name}</div>
               <div className="text-sm text-aparu-muted">{order.driver.car} · {order.driver.plate}</div>
@@ -421,7 +421,7 @@ export function RidePage() {
           </div>
           <div className="grid grid-cols-1 gap-3">
             <a href="https://apps.apple.com/" target="_blank" rel="noreferrer" className="w-full rounded-button bg-aparu-accent px-4 py-4 font-semibold text-black transition hover:opacity-90">Скачать в App Store</a>
-            <a href="https://play.google.com/store" target="_blank" rel="noreferrer" className="w-full rounded-button border border-aparu-border bg-[#121212] px-4 py-4 font-semibold text-aparu-text transition hover:border-aparu-accent/40">Скачать в Google Play</a>
+            <a href="https://play.google.com/store" target="_blank" rel="noreferrer" className="w-full rounded-button border border-aparu-border bg-aparu-surface-elevated px-4 py-4 font-semibold text-aparu-text transition hover:border-aparu-accent/40">Скачать в Google Play</a>
           </div>
           <button type="button" onClick={() => setStage('landing')} className="text-sm text-aparu-muted underline underline-offset-4">Оформить ещё одну поездку</button>
         </section>
@@ -441,10 +441,10 @@ function Progress({ stage }: { stage: RideStage }) {
   const active = steps.findIndex((item) => item.id === stage);
 
   return (
-    <div className="flex gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
       {steps.map((item, index) => (
-        <div key={item.id} className={`flex-1 rounded-full px-3 py-2 text-center text-xs font-medium transition ${index <= active ? 'bg-aparu-accent text-black' : 'bg-[#121212] text-aparu-muted'}`}>
-          {item.title}
+        <div key={item.id} className={`min-w-0 rounded-full px-3 py-2 text-center text-xs font-medium transition ${index <= active ? 'bg-aparu-accent text-black' : 'bg-aparu-surface-elevated text-aparu-muted'}`}>
+          <span className="block truncate">{item.title}</span>
         </div>
       ))}
     </div>
@@ -453,11 +453,11 @@ function Progress({ stage }: { stage: RideStage }) {
 
 function AddressCard({ title, label, subtitle, badge }: { title: string; label: string; subtitle?: string; badge: string }) {
   return (
-    <div className="flex gap-3 rounded-card border border-aparu-border bg-[#121212] p-4">
+    <div className="flex min-w-0 gap-3 rounded-card border border-aparu-border bg-aparu-surface-elevated p-4">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-aparu-accent text-sm font-bold text-black">{badge}</div>
-      <div>
+      <div className="min-w-0">
         <div className="text-xs uppercase tracking-[0.18em] text-aparu-muted">{title}</div>
-        <div className="mt-1 font-semibold text-aparu-text">{label}</div>
+        <div className="mt-1 break-words font-semibold text-aparu-text">{label}</div>
         {subtitle ? <div className="mt-1 text-sm text-aparu-muted">{subtitle}</div> : null}
       </div>
     </div>
@@ -466,9 +466,9 @@ function AddressCard({ title, label, subtitle, badge }: { title: string; label: 
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-card border border-aparu-border bg-[#121212] p-4">
+    <div className="min-w-0 rounded-card border border-aparu-border bg-aparu-surface-elevated p-4">
       <div className="text-xs uppercase tracking-[0.16em] text-aparu-muted">{label}</div>
-      <div className="mt-2 font-semibold text-aparu-text">{value}</div>
+      <div className="mt-2 break-words font-semibold text-aparu-text">{value}</div>
     </div>
   );
 }
