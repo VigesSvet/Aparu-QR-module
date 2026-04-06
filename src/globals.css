@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0d0d0d;
+  --color-surface: #1a1a1a;
+  --color-surface-elevated: #222222;
+  --color-accent: #ffd700;
+  --color-accent-soft: rgba(255, 215, 0, 0.12);
+  --color-text: #ffffff;
+  --color-muted: #a0a0a0;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-success: #45d483;
+  --color-danger: #ff7a7a;
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --radius-pill: 999px;
+  --content-width: 480px;
+}
+
+html {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(255, 215, 0, 0.08), transparent 28%),
+    var(--color-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(255, 215, 0, 0.28);
+  color: var(--color-text);
+}
+
+.leaflet-container {
+  background: #111;
+  border-radius: 20px;
+}

@@ -1,0 +1,503 @@
+{
+  "info": {
+    "_postman_id": "c3db4cfd-58f0-437b-a623-28e3038a8289",
+    "name": "Aparu Maps API",
+    "description": "API для работы с картами Aparu: геокодинг, обратный геокодинг, маршрутизация и тайлы.\n\n## Аутентификация\n\nВсе запросы требуют заголовок `X-Api-Key` с валидным API-ключом.\nКлюч можно получить у администратора системы Aparu.\n\n## Базовый URL\n\nПодставьте ваш базовый URL в переменную `base_url` коллекции.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "47702640",
+    "_collection_link": "https://go.postman.co/collection/47702640-c3db4cfd-58f0-437b-a623-28e3038a8289?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Геокодинг",
+      "item": [
+        {
+          "name": "Прямой геокодинг — поиск адреса по тексту",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"text\": \"Абая 1\",\n    \"latitude\": 49.9483,\n    \"longitude\": 82.6135,\n    \"withCities\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/geocode",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "geocode"
+              ]
+            },
+            "description": "Ищет адреса по текстовому запросу с учётом близости к переданным координатам.\n\n**Типы результатов (поле `type`):**\n- `s` — улица\n- `h` — дом (точный адрес)\n- `o` — особое место (аэропорт, ТЦ и т.д.)\n- `c` — населённый пункт\n\n**Параметры:**\n- `text` (обязательный) — поисковый текст, макс. 150 символов\n- `latitude` (обязательный) — широта для приоритета близости\n- `longitude` (обязательный) — долгота для приоритета близости\n- `withCities` — включить города в результаты (по умолчанию true)"
+          },
+          "response": [
+            {
+              "name": "Успешный поиск",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"text\": \"Абая 1\",\n    \"latitude\": 49.9483,\n    \"longitude\": 82.6135,\n    \"withCities\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/maps/geocode",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "maps",
+                    "geocode"
+                  ]
+                },
+                "description": "Ищет адреса по текстовому запросу с учётом близости к переданным координатам.\n\n**Типы результатов (поле `type`):**\n- `s` — улица\n- `h` — дом (точный адрес)\n- `o` — особое место (аэропорт, ТЦ и т.д.)\n- `c` — населённый пункт\n\n**Параметры:**\n- `text` (обязательный) — поисковый текст, макс. 150 символов\n- `latitude` (обязательный) — широта для приоритета близости\n- `longitude` (обязательный) — долгота для приоритета близости\n- `withCities` — включить города в результаты (по умолчанию true)"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "Text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"results\": [\n        {\n            \"address\": \"ул. Абая, 1\",\n            \"additionalInfo\": \"Усть-Каменогорск\",\n            \"latitude\": 49.9483,\n            \"longitude\": 82.6135,\n            \"type\": \"h\"\n        },\n        {\n            \"address\": \"ул. Абая, 1А\",\n            \"additionalInfo\": \"Усть-Каменогорск\",\n            \"latitude\": 49.9485,\n            \"longitude\": 82.6140,\n            \"type\": \"h\"\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Обратный геокодинг — адрес по координатам",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"latitude\": 49.9483,\n    \"longitude\": 82.6135\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/reverse-geocode",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "reverse-geocode"
+              ]
+            },
+            "description": "Определяет адрес, район/область и ближайший населённый пункт по координатам.\n\n**Параметры:**\n- `latitude` (обязательный) — широта (-90 .. 90)\n- `longitude` (обязательный) — долгота (-180 .. 180)\n\n**Ответ:**\n- `placeName` — название места/адрес\n- `areaName` — район/область\n- `accuratePlace` — true если адрес определён точно\n- `locality` — информация о ближайшем населённом пункте"
+          },
+          "response": [
+            {
+              "name": "Успешный обратный геокодинг",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"latitude\": 49.9483,\n    \"longitude\": 82.6135\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/maps/reverse-geocode",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "maps",
+                    "reverse-geocode"
+                  ]
+                },
+                "description": "Определяет адрес, район/область и ближайший населённый пункт по координатам.\n\n**Параметры:**\n- `latitude` (обязательный) — широта (-90 .. 90)\n- `longitude` (обязательный) — долгота (-180 .. 180)\n\n**Ответ:**\n- `placeName` — название места/адрес\n- `areaName` — район/область\n- `accuratePlace` — true если адрес определён точно\n- `locality` — информация о ближайшем населённом пункте"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "Text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"placeName\": \"ул. Абая, 1\",\n    \"areaName\": \"Усть-Каменогорск\",\n    \"accuratePlace\": true,\n    \"locality\": {\n        \"localityId\": 8,\n        \"name\": \"Усть-Каменогорск\",\n        \"latitude\": 49.9483,\n        \"longitude\": 82.6135\n    }\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Поиск адресов и определение координат"
+    },
+    {
+      "name": "Маршрутизация",
+      "item": [
+        {
+          "name": "Построить маршрут",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"points\": [\n        {\n            \"latitude\": 49.9483,\n            \"longitude\": 82.6135\n        },\n        {\n            \"latitude\": 49.9550,\n            \"longitude\": 82.6200\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/route",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "route"
+              ]
+            },
+            "description": "Строит автомобильный маршрут между двумя и более точками.\n\n**Параметры:**\n- `points` (обязательный) — массив точек маршрута (минимум 2)\n  - `latitude` — широта\n  - `longitude` — долгота\n\n**Ответ:**\n- `distance` — расстояние в метрах\n- `time` — время в миллисекундах\n- `coordinates` — массив координат маршрута [lng, lat]\n- `bbox` — ограничивающий прямоугольник [minLon, minLat, maxLon, maxLat]\n- `instructions` — пошаговые инструкции навигации\n\n**Знаки поворотов (sign):**\n| Значение | Описание |\n|----------|----------|\n| -3 | Резкий поворот налево |\n| -2 | Поворот налево |\n| -1 | Слегка налево |\n| 0 | Прямо |\n| 1 | Слегка направо |\n| 2 | Поворот направо |\n| 3 | Резкий поворот направо |\n| 4 | Финиш |\n| 5 | Промежуточная точка |\n| 6 | Круговое движение |"
+          },
+          "response": [
+            {
+              "name": "Маршрут построен",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"points\": [\n        {\n            \"latitude\": 49.9483,\n            \"longitude\": 82.6135\n        },\n        {\n            \"latitude\": 49.9550,\n            \"longitude\": 82.6200\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/maps/route",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "maps",
+                    "route"
+                  ]
+                },
+                "description": "Строит автомобильный маршрут между двумя и более точками.\n\n**Параметры:**\n- `points` (обязательный) — массив точек маршрута (минимум 2)\n  - `latitude` — широта\n  - `longitude` — долгота\n\n**Ответ:**\n- `distance` — расстояние в метрах\n- `time` — время в миллисекундах\n- `coordinates` — массив координат маршрута [lng, lat]\n- `bbox` — ограничивающий прямоугольник [minLon, minLat, maxLon, maxLat]\n- `instructions` — пошаговые инструкции навигации\n\n**Знаки поворотов (sign):**\n| Значение | Описание |\n|----------|----------|\n| -3 | Резкий поворот налево |\n| -2 | Поворот налево |\n| -1 | Слегка налево |\n| 0 | Прямо |\n| 1 | Слегка направо |\n| 2 | Поворот направо |\n| 3 | Резкий поворот направо |\n| 4 | Финиш |\n| 5 | Промежуточная точка |\n| 6 | Круговое движение |"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "Text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"distance\": 1250.5,\n    \"time\": 180000,\n    \"coordinates\": [\n        [82.6135, 49.9483],\n        [82.6150, 49.9490],\n        [82.6200, 49.9550]\n    ],\n    \"bbox\": [82.6135, 49.9483, 82.6200, 49.9550],\n    \"instructions\": [\n        {\n            \"distance\": 500.2,\n            \"time\": 60000,\n            \"text\": \"Двигайтесь на север по ул. Абая\",\n            \"streetName\": \"ул. Абая\",\n            \"sign\": 0,\n            \"interval\": [0, 1]\n        },\n        {\n            \"distance\": 750.3,\n            \"time\": 120000,\n            \"text\": \"Поверните направо\",\n            \"streetName\": \"ул. Ленина\",\n            \"sign\": 2,\n            \"interval\": [1, 2]\n        }\n    ]\n}"
+            },
+            {
+              "name": "Маршрут не найден",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"points\": [\n        {\n            \"latitude\": 49.9483,\n            \"longitude\": 82.6135\n        },\n        {\n            \"latitude\": 49.9550,\n            \"longitude\": 82.6200\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/maps/route",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "maps",
+                    "route"
+                  ]
+                },
+                "description": "Строит автомобильный маршрут между двумя и более точками.\n\n**Параметры:**\n- `points` (обязательный) — массив точек маршрута (минимум 2)\n  - `latitude` — широта\n  - `longitude` — долгота\n\n**Ответ:**\n- `distance` — расстояние в метрах\n- `time` — время в миллисекундах\n- `coordinates` — массив координат маршрута [lng, lat]\n- `bbox` — ограничивающий прямоугольник [minLon, minLat, maxLon, maxLat]\n- `instructions` — пошаговые инструкции навигации\n\n**Знаки поворотов (sign):**\n| Значение | Описание |\n|----------|----------|\n| -3 | Резкий поворот налево |\n| -2 | Поворот налево |\n| -1 | Слегка налево |\n| 0 | Прямо |\n| 1 | Слегка направо |\n| 2 | Поворот направо |\n| 3 | Резкий поворот направо |\n| 4 | Финиш |\n| 5 | Промежуточная точка |\n| 6 | Круговое движение |"
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "Text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"code\": \"ROUTE_NOT_FOUND\",\n    \"message\": \"Маршрут не найден. Проверьте координаты точек\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Построить маршрут (3 точки)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"points\": [\n        {\n            \"latitude\": 49.9483,\n            \"longitude\": 82.6135\n        },\n        {\n            \"latitude\": 49.9520,\n            \"longitude\": 82.6180\n        },\n        {\n            \"latitude\": 49.9550,\n            \"longitude\": 82.6200\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/route",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "route"
+              ]
+            },
+            "description": "Пример построения маршрута с промежуточной точкой"
+          },
+          "response": []
+        }
+      ],
+      "description": "Построение автомобильных маршрутов"
+    },
+    {
+      "name": "Тайлы и стили карты",
+      "item": [
+        {
+          "name": "Получить конфигурацию тайлов",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/tiles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "tiles"
+              ]
+            },
+            "description": "Возвращает URL-шаблон для загрузки векторных тайлов PBF.\n\nДля отображения карты используйте библиотеку MapLibre GL JS и подставьте параметры {z}, {x}, {y}:\n- z — уровень зума (0–14)\n- x — номер колонки тайла\n- y — номер строки тайла"
+          },
+          "response": [
+            {
+              "name": "Конфигурация тайлов",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/maps/tiles",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "maps",
+                    "tiles"
+                  ]
+                },
+                "description": "Возвращает URL-шаблон для загрузки векторных тайлов PBF.\n\nДля отображения карты используйте библиотеку MapLibre GL JS и подставьте параметры {z}, {x}, {y}:\n- z — уровень зума (0–14)\n- x — номер колонки тайла\n- y — номер строки тайла"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "Text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"tileUrlTemplate\": \"https://aparutaxi.kz:8446/data/v3/{z}/{x}/{y}.pbf\",\n    \"format\": \"pbf\",\n    \"minZoom\": 0,\n    \"maxZoom\": 14\n}"
+            }
+          ]
+        },
+        {
+          "name": "Получить tiles.json (TileJSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/tiles/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "tiles",
+                "config"
+              ]
+            },
+            "description": "Возвращает полный файл tiles.json в формате TileJSON 2.0.0 с метаданными слоёв.\nИспользуется картографическими библиотеками для автоматической настройки источника тайлов."
+          },
+          "response": []
+        },
+        {
+          "name": "Получить стиль карты (style.json)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maps/style",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "maps",
+                "style"
+              ]
+            },
+            "description": "Возвращает стиль карты, совместимый с MapLibre GL JS / Mapbox GL JS.\n\nПример использования:\n```javascript\nconst map = new maplibregl.Map({\n    container: 'map',\n    style: 'https://aparutaxi.kz/api/v1/maps/style',\n    center: [82.6135, 49.9483],\n    zoom: 12\n});\n```"
+          },
+          "response": []
+        }
+      ],
+      "description": "Конфигурация для отображения карты"
+    }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-Api-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://testtaxi3.aparu.kz"
+    },
+    {
+      "key": "api_key",
+      "value": "test1"
+    }
+  ]
+}
