@@ -1,62 +1,76 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/app/AuthContext'
+import { locations, tariffs as tariffsApi } from '@/lib/services/api'
+import type { LocationOut, TariffOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
 
-interface Location {
-  id: string
-  name: string
-  address: string
-}
-
-interface Tariff {
-  id: string
-  name: string
-  price: number
-  currency: string
-  etaMin: number
-  description: string
-}
-
-const MOCK_LOCATIONS: Record<string, Location> = {
-  'demo-loc': {
-    id: 'demo-loc',
-    name: 'ТЦ Мега',
-    address: 'ул. Ленина, 42, Алматы',
-  },
-  default: {
-    id: 'unknown',
-    name: 'Текущая точка',
-    address: 'Определяется...',
-  },
-}
-
-const MOCK_TARIFFS: Tariff[] = [
-  {
-    id: 'economy',
-    name: 'Эконом',
-    price: 800,
-    currency: '₸',
-    etaMin: 3,
-    description: 'Доступный вариант',
-  },
-  {
-    id: 'comfort',
-    name: 'Комфорт',
-    price: 1200,
-    currency: '₸',
-    etaMin: 5,
-    description: 'Просторный салон',
-  },
-]
-
 export function ScanPage() {
-  const { locationId = 'default' } = useParams<{ locationId: string }>()
+  const { locationId = '1' } = useParams<{ locationId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
-  const location = MOCK_LOCATIONS[locationId] ?? MOCK_LOCATIONS.default
-  const [selectedTariff, setSelectedTariff] = useState(MOCK_TARIFFS[0].id)
+  const [location, setLocation] = useState<LocationOut | null>(null)
+  const [tariffList, setTariffList] = useState<TariffOut[]>([])
+  const [selectedTariff, setSelectedTariff] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const id = parseInt(locationId, 10)
+    if (isNaN(id)) {
+      setError('Некорректный QR-код')
+      setLoading(false)
+      return
+    }
+
+    Promise.all([locations.get(id), tariffsApi.list()])
+      .then(([loc, tList]) => {
+        setLocation(loc)
+        setTariffList(tList)
+        if (tList.length > 0) setSelectedTariff(tList[0].id)
+      })
+      .catch(() => setError('Не удалось загрузить данные'))
+      .finally(() => setLoading(false))
+  }, [locationId])
+
+  function handleOrder() {
+    if (!user) {
+      // Save location & tariff to sessionStorage for after auth
+      sessionStorage.setItem('aparu_scan_location', locationId)
+      sessionStorage.setItem('aparu_scan_tariff', String(selectedTariff))
+      navigate('/verify')
+      return
+    }
+    // Already authenticated, go to booking
+    sessionStorage.setItem('aparu_scan_location', locationId)
+    sessionStorage.setItem('aparu_scan_tariff', String(selectedTariff))
+    navigate('/booking')
+  }
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="flex items-center justify-center flex-1">
+          <div className="w-8 h-8 border-3 border-brand-orange border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageShell>
+    )
+  }
+
+  if (error || !location) {
+    return (
+      <PageShell>
+        <div className="flex flex-col items-center justify-center flex-1 px-4">
+          <p className="text-3xl mb-4">😕</p>
+          <p className="text-sm text-text-muted text-center">{error || 'Точка не найдена'}</p>
+          <Button className="mt-6" onClick={() => navigate('/login')}>На главную</Button>
+        </div>
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell>
@@ -92,7 +106,7 @@ export function ScanPage() {
             Тариф
           </p>
           <div className="flex flex-col gap-2">
-            {MOCK_TARIFFS.map((tariff) => {
+            {tariffList.map((tariff) => {
               const active = tariff.id === selectedTariff
               return (
                 <button
@@ -111,9 +125,8 @@ export function ScanPage() {
                   </div>
                   <div className="flex flex-col items-end gap-0.5 shrink-0 ml-4">
                     <span className="font-medium text-base text-text-primary">
-                      {tariff.price} {tariff.currency}
+                      {tariff.base_price} {tariff.currency}
                     </span>
-                    <span className="text-sm text-text-muted">{tariff.etaMin} мин</span>
                   </div>
                 </button>
               )
@@ -123,7 +136,7 @@ export function ScanPage() {
 
         <div className="flex-1" />
 
-        <Button onClick={() => navigate('/verify')}>Заказать</Button>
+        <Button onClick={handleOrder} disabled={!selectedTariff}>Заказать</Button>
       </main>
     </PageShell>
   )

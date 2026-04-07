@@ -1,39 +1,73 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/app/AuthContext'
+import { locations, tariffs as tariffsApi, orders } from '@/lib/services/api'
+import type { LocationOut, TariffOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
 
-interface Tariff {
-  id: string
-  name: string
-  price: number
-  currency: string
-}
-
-const MOCK_FROM = { name: 'ТЦ Мега', address: 'ул. Ленина, 42, Алматы' }
-
-const MOCK_TARIFFS: Tariff[] = [
-  { id: 'economy', name: 'Эконом', price: 800, currency: '₸' },
-  { id: 'comfort', name: 'Комфорт', price: 1200, currency: '₸' },
-  { id: 'business', name: 'Бизнес', price: 2000, currency: '₸' },
-]
-
 export function BookingPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [destination, setDestination] = useState('')
   const [destinationError, setDestinationError] = useState('')
-  const [selectedTariff, setSelectedTariff] = useState(MOCK_TARIFFS[0].id)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const tariff = MOCK_TARIFFS.find((t) => t.id === selectedTariff) ?? MOCK_TARIFFS[0]
+  const [location, setLocation] = useState<LocationOut | null>(null)
+  const [tariffList, setTariffList] = useState<TariffOut[]>([])
+  const [selectedTariff, setSelectedTariff] = useState<number | null>(null)
 
-  function handleConfirm() {
+  useEffect(() => {
+    if (!user) { navigate('/login'); return }
+
+    const locId = parseInt(sessionStorage.getItem('aparu_scan_location') ?? '1', 10)
+    const tarId = parseInt(sessionStorage.getItem('aparu_scan_tariff') ?? '0', 10)
+
+    Promise.all([locations.get(locId), tariffsApi.list()])
+      .then(([loc, tList]) => {
+        setLocation(loc)
+        setTariffList(tList)
+        setSelectedTariff(tarId || (tList[0]?.id ?? null))
+      })
+      .catch(() => navigate('/login'))
+      .finally(() => setLoading(false))
+  }, [user, navigate])
+
+  const tariff = tariffList.find((t) => t.id === selectedTariff) ?? tariffList[0]
+
+  async function handleConfirm() {
     if (!destination.trim()) {
       setDestinationError('Укажите место назначения')
       return
     }
+    if (!location || !tariff) return
+
     setDestinationError('')
-    navigate('/status/order-mock-001')
+    setSubmitting(true)
+    try {
+      const order = await orders.create({
+        qr_location_id: location.id,
+        tariff_id: tariff.id,
+        destination_address: destination,
+      })
+      navigate(`/status/${order.id}`)
+    } catch (e: any) {
+      setDestinationError(e.message ?? 'Ошибка создания заказа')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="flex items-center justify-center flex-1">
+          <div className="w-8 h-8 border-3 border-brand-orange border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageShell>
+    )
   }
 
   return (
@@ -60,9 +94,9 @@ export function BookingPage() {
               </div>
               <div className="min-w-0">
                 <p className="font-medium text-text-primary text-sm leading-snug truncate">
-                  {MOCK_FROM.name}
+                  {location?.name}
                 </p>
-                <p className="text-xs text-text-muted truncate">{MOCK_FROM.address}</p>
+                <p className="text-xs text-text-muted truncate">{location?.address}</p>
               </div>
             </div>
 
@@ -106,7 +140,7 @@ export function BookingPage() {
             Тариф
           </p>
           <div className="flex gap-2">
-            {MOCK_TARIFFS.map((t) => {
+            {tariffList.map((t) => {
               const active = t.id === selectedTariff
               return (
                 <button
@@ -121,7 +155,7 @@ export function BookingPage() {
                 >
                   <span className="text-sm font-medium text-text-primary">{t.name}</span>
                   <span className="text-xs text-text-muted mt-0.5">
-                    {t.price} {t.currency}
+                    {t.base_price} {t.currency}
                   </span>
                 </button>
               )
@@ -130,22 +164,26 @@ export function BookingPage() {
         </div>
 
         {/* Summary */}
-        <Card warm>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-muted">Стоимость поездки</span>
-            <span className="font-medium text-base text-text-primary">
-              {tariff.price} {tariff.currency}
-            </span>
-          </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-sm text-text-muted">Тариф</span>
-            <span className="text-sm font-medium text-text-primary">{tariff.name}</span>
-          </div>
-        </Card>
+        {tariff && (
+          <Card warm>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-muted">Стоимость поездки</span>
+              <span className="font-medium text-base text-text-primary">
+                {tariff.base_price} {tariff.currency}
+              </span>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-sm text-text-muted">Тариф</span>
+              <span className="text-sm font-medium text-text-primary">{tariff.name}</span>
+            </div>
+          </Card>
+        )}
 
         <div className="flex-1" />
 
-        <Button onClick={handleConfirm}>Подтвердить заказ</Button>
+        <Button onClick={handleConfirm} disabled={submitting}>
+          {submitting ? 'Оформление...' : 'Подтвердить заказ'}
+        </Button>
       </main>
     </PageShell>
   )

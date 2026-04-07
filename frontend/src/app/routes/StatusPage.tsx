@@ -1,42 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/app/AuthContext'
+import { orders } from '@/lib/services/api'
+import type { OrderOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
 
-type OrderStatus = 'searching' | 'assigned' | 'driving' | 'arrived'
-
-interface Driver {
-  name: string
-  rating: number
-  car: string
-  plate: string
-}
-
-interface Order {
-  id: string
-  status: OrderStatus
-  driver?: Driver
-  from: string
-  to: string
-  price: number
-  etaMin?: number
-}
-
-const MOCK_ORDER: Order = {
-  id: 'order-mock-001',
-  status: 'assigned',
-  driver: {
-    name: 'Алибек С.',
-    rating: 4.9,
-    car: 'Toyota Camry, белый',
-    plate: 'A 123 BC',
-  },
-  from: 'ТЦ Мега',
-  to: 'Проспект Назарбаева, 10',
-  price: 800,
-  etaMin: 4,
-}
+type OrderStatus = 'searching' | 'assigned' | 'driving' | 'arrived' | 'completed' | 'cancelled'
 
 const STATUS_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'searching', label: 'Поиск' },
@@ -45,23 +16,75 @@ const STATUS_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'arrived', label: 'Прибыл' },
 ]
 
-const STATUS_MESSAGES: Record<OrderStatus, string> = {
+const STATUS_MESSAGES: Record<string, string> = {
   searching: 'Ищем ближайшего водителя...',
   assigned: 'Водитель назначен и выезжает',
   driving: 'Водитель едет к вам',
   arrived: 'Водитель ожидает вас у входа',
+  completed: 'Поездка завершена',
+  cancelled: 'Заказ отменён',
 }
 
-function statusIndex(s: OrderStatus) {
+function statusIndex(s: string) {
   return STATUS_STEPS.findIndex((step) => step.key === s)
 }
 
 export function StatusPage() {
   const { orderId } = useParams<{ orderId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
-  // In real app: fetch order by orderId. Using mock with dev cycle control.
-  const [order] = useState<Order>({ ...MOCK_ORDER, id: orderId ?? MOCK_ORDER.id })
+  const [order, setOrder] = useState<OrderOut | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId) return
+    try {
+      const o = await orders.get(parseInt(orderId, 10))
+      setOrder(o)
+      if (o.status === 'completed') {
+        navigate('/done')
+      }
+    } catch (e: any) {
+      setError(e.message ?? 'Ошибка загрузки заказа')
+    } finally {
+      setLoading(false)
+    }
+  }, [orderId, navigate])
+
+  useEffect(() => {
+    loadOrder()
+    // Poll every 5 seconds
+    const interval = setInterval(loadOrder, 5000)
+    return () => clearInterval(interval)
+  }, [loadOrder])
+
+  async function handleCancel() {
+    if (!order) return
+    await orders.updateStatus(order.id, 'cancelled')
+    navigate('/scan/1')
+  }
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="flex items-center justify-center flex-1">
+          <div className="w-8 h-8 border-3 border-brand-orange border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageShell>
+    )
+  }
+
+  if (error || !order) {
+    return (
+      <PageShell>
+        <div className="flex flex-col items-center justify-center flex-1 px-4">
+          <p className="text-sm text-text-muted">{error || 'Заказ не найден'}</p>
+        </div>
+      </PageShell>
+    )
+  }
 
   const currentIdx = statusIndex(order.status)
 
@@ -70,9 +93,9 @@ export function StatusPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 pt-6 pb-4">
         <div>
-          <p className="text-xs text-text-muted font-medium">Заказ #{order.id.slice(-6).toUpperCase()}</p>
+          <p className="text-xs text-text-muted font-medium">Заказ #{order.id}</p>
           <h1 className="text-lg font-bold text-text-primary leading-tight mt-0.5">
-            {STATUS_MESSAGES[order.status]}
+            {STATUS_MESSAGES[order.status] ?? order.status}
           </h1>
         </div>
       </header>
@@ -104,39 +127,17 @@ export function StatusPage() {
           })}
         </div>
 
-        {/* Driver card — shown once assigned */}
-        {order.driver && order.status !== 'searching' && (
+        {/* Driver card */}
+        {order.driver_name && order.status !== 'searching' && (
           <Card>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-surface-light flex items-center justify-center shrink-0 text-2xl">
                 🧑‍✈️
               </div>
               <div className="flex flex-col flex-1 min-w-0">
-                <span className="font-medium text-base text-text-primary">{order.driver.name}</span>
-                <span className="text-sm text-text-muted">{order.driver.car}</span>
+                <span className="font-medium text-base text-text-primary">{order.driver_name}</span>
+                <span className="text-sm text-text-muted">{order.tariff_name}</span>
               </div>
-              <div className="flex flex-col items-end shrink-0">
-                <span className="text-sm font-medium text-text-primary">
-                  ★ {order.driver.rating}
-                </span>
-                <span className="text-sm font-bold text-brand-dark mt-0.5 tracking-wider">
-                  {order.driver.plate}
-                </span>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* ETA block */}
-        {order.status !== 'arrived' && order.etaMin && (
-          <Card warm>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-muted">
-                {order.status === 'searching' ? 'Ожидаемое время подачи' : 'Прибудет через'}
-              </span>
-              <span className="text-base font-medium text-text-primary">
-                {order.status === 'searching' ? '...' : `~${order.etaMin} мин`}
-              </span>
             </div>
           </Card>
         )}
@@ -144,9 +145,9 @@ export function StatusPage() {
         {/* Route summary */}
         <Card>
           <div className="flex flex-col gap-2.5">
-            <RouteRow label="А" text={order.from} filled />
+            <RouteRow label="А" text={order.location_name ?? '—'} filled />
             <div className="w-0.5 h-3 bg-gray-200 ml-3" />
-            <RouteRow label="Б" text={order.to} filled={false} />
+            <RouteRow label="Б" text={order.destination_address || '—'} filled={false} />
           </div>
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
             <span className="text-sm text-text-muted">Стоимость</span>
@@ -169,7 +170,7 @@ export function StatusPage() {
         {order.status === 'arrived' ? (
           <Button onClick={() => navigate('/done')}>Завершить поездку</Button>
         ) : order.status === 'searching' ? (
-          <Button variant="second-stroke" onClick={() => navigate(-1)}>
+          <Button variant="second-stroke" onClick={handleCancel}>
             Отменить заказ
           </Button>
         ) : null}

@@ -1,8 +1,7 @@
 """
 Database link (SQLite).
 
-Creates the async engine and session factory.  Tables / models are NOT
-implemented — this is just the connection scaffold for future use.
+Creates the async engine, session factory, and init_db helper.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -26,3 +25,13 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
     """FastAPI dependency — yields a DB session."""
     async with async_session() as session:
         yield session
+
+
+async def init_db() -> None:
+    """Create all tables if they don't exist."""
+    from app.models.base import Base
+    # Import all models so they register with Base.metadata
+    import app.models  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

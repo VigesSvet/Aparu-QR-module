@@ -1,1 +1,1 @@
-# Aparu QR Module Backend — Routers
+"""Routers package."""

@@ -8,7 +8,7 @@ import { PageShell } from '@/components/PageShell'
 
 type Step = 'phone' | 'code'
 
-export function VerifyPage() {
+export function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
   const [step, setStep] = useState<Step>('phone')
@@ -45,7 +45,7 @@ export function VerifyPage() {
       await authApi.sendCode(digits)
       setStep('code')
     } catch (e: any) {
-      setPhoneError(e.message ?? 'Ошибка')
+      setPhoneError(e.message ?? 'Ошибка отправки кода')
     } finally {
       setLoading(false)
     }
@@ -60,8 +60,19 @@ export function VerifyPage() {
     setLoading(true)
     try {
       const digits = phone.replace(/\D/g, '')
-      await login(digits, code)
-      navigate('/booking')
+      const res = await login(digits, code)
+      // Route based on role
+      switch (res.user.role) {
+        case 'admin':
+          navigate('/admin')
+          break
+        case 'driver':
+          navigate('/driver')
+          break
+        default:
+          navigate('/scan/1')
+          break
+      }
     } catch (e: any) {
       setCodeError(e.message ?? 'Неверный код')
     } finally {
@@ -72,31 +83,22 @@ export function VerifyPage() {
   return (
     <PageShell>
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 pt-6 pb-4">
-        {step === 'code' && (
-          <button
-            onClick={() => { setStep('phone'); setCode(''); setCodeError('') }}
-            className="w-8 h-8 flex items-center justify-center text-text-muted"
-            aria-label="Назад"
-          >
-            <ChevronLeftIcon />
-          </button>
-        )}
-        <div>
-          <h1 className="text-lg font-bold text-text-primary leading-tight">
-            {step === 'phone' ? 'Ваш номер телефона' : 'Введите код из SMS'}
-          </h1>
-          <p className="text-sm text-text-muted mt-0.5">
-            {step === 'phone'
-              ? 'Мы отправим код подтверждения'
-              : `Код отправлен на ${phone}`}
-          </p>
+      <header className="flex flex-col items-center px-4 pt-12 pb-6">
+        <div className="w-16 h-16 rounded-2xl bg-brand-orange flex items-center justify-center mb-4 shadow-lg">
+          <span className="text-white text-2xl font-bold">A</span>
         </div>
+        <h1 className="text-2xl font-bold text-text-primary tracking-tight">APARU</h1>
+        <p className="text-sm text-text-muted mt-1">QR-сервис заказа такси</p>
       </header>
 
       <main className="flex flex-col flex-1 px-4 gap-6 pb-8">
         {step === 'phone' ? (
           <>
+            <div>
+              <h2 className="text-lg font-bold text-text-primary leading-tight">Вход</h2>
+              <p className="text-sm text-text-muted mt-1">Мы отправим код подтверждения на ваш номер</p>
+            </div>
+
             <Input
               label="Телефон"
               type="tel"
@@ -109,13 +111,28 @@ export function VerifyPage() {
               error={phoneError}
               autoFocus
             />
+
             <div className="flex-1" />
+
             <Button onClick={handleSendCode} disabled={phone.length < 3 || loading}>
               {loading ? 'Отправка...' : 'Получить код'}
             </Button>
           </>
         ) : (
           <>
+            <div>
+              <button
+                onClick={() => { setStep('phone'); setCode(''); setCodeError('') }}
+                className="text-sm text-text-muted mb-2 flex items-center gap-1"
+              >
+                <ChevronLeftIcon /> Назад
+              </button>
+              <h2 className="text-lg font-bold text-text-primary leading-tight">Введите код из SMS</h2>
+              <p className="text-sm text-text-muted mt-1">
+                Код отправлен на {phone}
+              </p>
+            </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-text-primary">Код подтверждения</label>
               <input
@@ -147,16 +164,10 @@ export function VerifyPage() {
               Код для тестирования: <span className="font-bold text-brand-orange">1234</span>
             </p>
 
-            <button
-              onClick={() => setStep('phone')}
-              className="text-sm text-text-muted text-center underline underline-offset-2"
-            >
-              Отправить код повторно
-            </button>
-
             <div className="flex-1" />
+
             <Button onClick={handleVerifyCode} disabled={code.length < 4 || loading}>
-              {loading ? 'Проверка...' : 'Подтвердить'}
+              {loading ? 'Проверка...' : 'Войти'}
             </Button>
           </>
         )}
@@ -167,7 +178,7 @@ export function VerifyPage() {
 
 function ChevronLeftIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
       <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )

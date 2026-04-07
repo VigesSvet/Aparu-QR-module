@@ -1,1 +1,1 @@
-# Aparu QR Module Backend — Schemas
+"""Schemas package."""

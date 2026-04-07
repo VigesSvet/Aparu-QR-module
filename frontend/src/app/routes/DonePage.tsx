@@ -3,26 +3,6 @@ import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
 
-interface CompletedRide {
-  from: string
-  to: string
-  price: number
-  currency: string
-  durationMin: number
-  driverName: string
-  driverRating: number
-}
-
-const MOCK_RIDE: CompletedRide = {
-  from: 'ТЦ Мега',
-  to: 'Проспект Назарбаева, 10',
-  price: 800,
-  currency: '₸',
-  durationMin: 12,
-  driverName: 'Алибек С.',
-  driverRating: 4.9,
-}
-
 export function DonePage() {
   const navigate = useNavigate()
 
@@ -41,28 +21,8 @@ export function DonePage() {
           Спасибо, что воспользовались APARU
         </p>
 
-        {/* Ride summary */}
-        <div className="w-full mt-8">
-          <Card>
-            <div className="flex flex-col gap-3">
-              <SummaryRow label="Откуда" value={MOCK_RIDE.from} />
-              <SummaryRow label="Куда" value={MOCK_RIDE.to} />
-              <div className="border-t border-gray-100" />
-              <SummaryRow label="Время в пути" value={`${MOCK_RIDE.durationMin} мин`} />
-              <SummaryRow label="Водитель" value={`${MOCK_RIDE.driverName} ★ ${MOCK_RIDE.driverRating}`} />
-              <div className="border-t border-gray-100" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-text-muted">Итого</span>
-                <span className="text-lg font-bold text-text-primary">
-                  {MOCK_RIDE.price} {MOCK_RIDE.currency}
-                </span>
-              </div>
-            </div>
-          </Card>
-        </div>
-
         {/* Rating */}
-        <div className="w-full mt-4">
+        <div className="w-full mt-8">
           <Card warm>
             <p className="text-sm text-text-muted text-center mb-3">Оцените поездку</p>
             <div className="flex items-center justify-center gap-3">
@@ -86,7 +46,6 @@ export function DonePage() {
           <Button
             variant="main"
             onClick={() => {
-              // In production: deep-link to store
               window.open('https://aparu.kz', '_blank', 'noopener,noreferrer')
             }}
           >
@@ -94,21 +53,12 @@ export function DonePage() {
           </Button>
           <Button
             variant="third"
-            onClick={() => navigate('/scan/demo-loc')}
+            onClick={() => navigate('/scan/1')}
           >
             Заказать ещё раз
           </Button>
         </div>
       </main>
     </PageShell>
-  )
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-text-muted shrink-0">{label}</span>
-      <span className="text-sm font-medium text-text-primary text-right">{value}</span>
-    </div>
   )
 }

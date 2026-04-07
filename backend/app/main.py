@@ -13,7 +13,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import maps
+from app.database import init_db
+from app.routers import maps, auth, locations, tariffs, orders, drivers
 
 
 # ── Lifespan ─────────────────────────────────────────────
@@ -21,13 +22,9 @@ from app.routers import maps
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown hooks.
-
-    Database init would go here once models are implemented.
-    """
-    # startup
+    """Startup / shutdown hooks."""
+    await init_db()
     yield
-    # shutdown
 
 
 # ── App factory ──────────────────────────────────────────
@@ -39,7 +36,7 @@ app = FastAPI(
     description=(
         "Backend API for the Aparu QR taxi-ordering module.\n\n"
         "Proxies Aparu Maps API (geocode, reverse-geocode, routing, tiles) "
-        "and will host business logic once the database layer is wired up."
+        "and provides business logic for orders, users, and QR locations."
     ),
     lifespan=lifespan,
 )
@@ -57,7 +54,12 @@ app.add_middleware(
 
 # ── Routers ──────────────────────────────────────────────
 
+app.include_router(auth.router)
 app.include_router(maps.router)
+app.include_router(locations.router)
+app.include_router(tariffs.router)
+app.include_router(orders.router)
+app.include_router(drivers.router)
 
 
 # ── Health-check ─────────────────────────────────────────

@@ -1,1 +1,1 @@
-# Aparu QR Module Backend — Services
+"""Services package."""
