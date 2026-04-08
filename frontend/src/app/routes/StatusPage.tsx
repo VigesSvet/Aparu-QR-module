@@ -32,7 +32,7 @@ function statusIndex(s: string) {
 export function StatusPage() {
   const { orderId } = useParams<{ orderId: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  useAuth()
 
   const [order, setOrder] = useState<OrderOut | null>(null)
   const [loading, setLoading] = useState(true)

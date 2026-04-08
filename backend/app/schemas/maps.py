@@ -21,10 +21,10 @@ class GeocodeRequest(BaseModel):
 
 class GeocodeResultItem(BaseModel):
     address: str
-    additionalInfo: str
+    additionalInfo: str | None = None
     latitude: float
     longitude: float
-    type: str  # s | h | o | c
+    type: str | None = None  # s | h | o | c
 
 
 class GeocodeResponse(BaseModel):
@@ -49,9 +49,9 @@ class Locality(BaseModel):
 
 
 class ReverseGeocodeResponse(BaseModel):
-    placeName: str
-    areaName: str
-    accuratePlace: bool
+    placeName: str | None = None
+    areaName: str | None = None
+    accuratePlace: bool = False
     locality: Locality | None = None
 
 

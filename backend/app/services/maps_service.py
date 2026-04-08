@@ -57,7 +57,21 @@ async def geocode(
             status_code=resp.status_code,
             detail=resp.text,
         )
-    return resp.json()
+    raw = resp.json()
+    # Aparu API returns PascalCase — normalize to camelCase
+    results = raw.get("Results") or raw.get("results") or []
+    return {
+        "results": [
+            {
+                "address": r.get("Address") or r.get("address") or "",
+                "additionalInfo": r.get("AdditionalInfo") if r.get("AdditionalInfo") is not None else r.get("additionalInfo"),
+                "latitude": r.get("Latitude") if r.get("Latitude") is not None else r.get("latitude"),
+                "longitude": r.get("Longitude") if r.get("Longitude") is not None else r.get("longitude"),
+                "type": r.get("Type") if r.get("Type") is not None else r.get("type"),
+            }
+            for r in results
+        ]
+    }
 
 
 # ── Reverse geocoding ────────────────────────────────────
@@ -80,7 +94,20 @@ async def reverse_geocode(latitude: float, longitude: float) -> dict:
             status_code=resp.status_code,
             detail=resp.text,
         )
-    return resp.json()
+    raw = resp.json()
+    # Aparu API returns PascalCase — normalize to camelCase
+    locality = raw.get("Locality") or raw.get("locality")
+    return {
+        "placeName": raw.get("PlaceName") or raw.get("placeName"),
+        "areaName": raw.get("AreaName") or raw.get("areaName"),
+        "accuratePlace": raw.get("AccuratePlace") or raw.get("accuratePlace", False),
+        "locality": {
+            "localityId": locality.get("LocalityId") or locality.get("localityId"),
+            "name": locality.get("Name") or locality.get("name"),
+            "latitude": locality.get("Latitude") or locality.get("latitude"),
+            "longitude": locality.get("Longitude") or locality.get("longitude"),
+        } if locality else None,
+    }
 
 
 # ── Routing ──────────────────────────────────────────────
@@ -107,7 +134,25 @@ async def build_route(points: list[dict]) -> dict:
             status_code=resp.status_code,
             detail=resp.text,
         )
-    return resp.json()
+    raw = resp.json()
+    # Aparu API returns PascalCase — normalize to camelCase
+    return {
+        "distance": raw.get("Distance") or raw.get("distance", 0),
+        "time": raw.get("Time") or raw.get("time", 0),
+        "coordinates": raw.get("Coordinates") or raw.get("coordinates", []),
+        "bbox": raw.get("BBox") or raw.get("bbox", []),
+        "instructions": [
+            {
+                "distance": i.get("Distance") or i.get("distance", 0),
+                "time": i.get("Time") or i.get("time", 0),
+                "text": i.get("Text") or i.get("text", ""),
+                "streetName": i.get("StreetName") or i.get("streetName", ""),
+                "sign": i.get("Sign") if i.get("Sign") is not None else i.get("sign", 0),
+                "interval": i.get("Interval") or i.get("interval", []),
+            }
+            for i in (raw.get("Instructions") or raw.get("instructions") or [])
+        ],
+    }
 
 
 # ── Tiles ────────────────────────────────────────────────

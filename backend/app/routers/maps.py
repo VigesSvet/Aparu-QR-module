@@ -18,7 +18,6 @@ from app.schemas.maps import (
     GeocodeRequest,
     GeocodeResponse,
     ReverseGeocodeRequest,
-    ReverseGeocodeResponse,
     RouteErrorResponse,
     RouteRequest,
     RouteResponse,
@@ -56,7 +55,6 @@ async def geocode(body: GeocodeRequest):
 
 @router.post(
     "/reverse-geocode",
-    response_model=ReverseGeocodeResponse,
     summary="Reverse geocoding — address by coordinates",
     description=(
         "Determines address, area and nearest locality "
@@ -64,11 +62,10 @@ async def geocode(body: GeocodeRequest):
     ),
 )
 async def reverse_geocode(body: ReverseGeocodeRequest):
-    data = await maps_service.reverse_geocode(
+    return await maps_service.reverse_geocode(
         latitude=body.latitude,
         longitude=body.longitude,
     )
-    return data
 
 
 # ── Routing ──────────────────────────────────────────────

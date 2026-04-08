@@ -106,8 +106,6 @@ export const auth = {
 
 export interface LocationOut {
   id: number
-  name: string
-  address: string
   latitude: number
   longitude: number
   is_active: boolean
@@ -117,7 +115,7 @@ export interface LocationOut {
 export const locations = {
   list: () => request<LocationOut[]>('/api/v1/locations'),
   get: (id: number) => request<LocationOut>(`/api/v1/locations/${id}`),
-  create: (data: { name: string; address: string; latitude: number; longitude: number }) =>
+  create: (data: { latitude: number; longitude: number }) =>
     request<LocationOut>('/api/v1/locations', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<LocationOut>) =>
     request<LocationOut>(`/api/v1/locations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -183,6 +181,48 @@ export const orders = {
     request<OrderOut>(`/api/v1/orders/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+}
+
+// ── Maps ─────────────────────────────────────────────────
+
+export interface GeocodeResultItem {
+  address: string
+  additionalInfo: string
+  latitude: number
+  longitude: number
+  type: 's' | 'h' | 'o' | 'c'
+}
+
+export interface ReverseGeocodeResponse {
+  placeName: string | null
+  areaName: string | null
+  accuratePlace: boolean
+  locality: { localityId: number; name: string; latitude: number; longitude: number } | null
+}
+
+export interface RouteResponse {
+  distance: number
+  time: number
+  coordinates: [number, number][]
+  bbox: number[]
+}
+
+export const maps = {
+  geocode: (text: string, latitude: number, longitude: number) =>
+    request<{ results: GeocodeResultItem[] }>('/api/v1/maps/geocode', {
+      method: 'POST',
+      body: JSON.stringify({ text, latitude, longitude, withCities: true }),
+    }),
+  reverseGeocode: (latitude: number, longitude: number) =>
+    request<ReverseGeocodeResponse>('/api/v1/maps/reverse-geocode', {
+      method: 'POST',
+      body: JSON.stringify({ latitude, longitude }),
+    }),
+  route: (points: { latitude: number; longitude: number }[]) =>
+    request<RouteResponse>('/api/v1/maps/route', {
+      method: 'POST',
+      body: JSON.stringify({ points }),
     }),
 }
 

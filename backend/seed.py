@@ -21,9 +21,7 @@ import os
 # Ensure the backend dir is on the path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from sqlalchemy import select
-
-from app.database import engine, async_session, init_db
+from app.database import engine, async_session
 from app.models.user import User, UserRole, DriverProfile
 from app.models.location import QRLocation
 from app.models.tariff import Tariff
@@ -55,25 +53,10 @@ DRIVER_PROFILE = {
     "is_online": True,
 }
 
+# Точки А — Усть-Каменогорск (только координаты, название берётся через reverse geocoding)
 LOCATIONS = [
-    {
-        "name": "ТЦ Мега",
-        "address": "ул. Розыбакиева, 247А, Алматы",
-        "latitude": 43.2046,
-        "longitude": 76.8994,
-    },
-    {
-        "name": "Аэропорт Алматы",
-        "address": "ул. Майлина, 2, Алматы",
-        "latitude": 43.3521,
-        "longitude": 77.0405,
-    },
-    {
-        "name": "ЖД Вокзал Алматы-1",
-        "address": "Привокзальная площадь, 1, Алматы",
-        "latitude": 43.3348,
-        "longitude": 76.9251,
-    },
+    {"latitude": 49.942906, "longitude": 82.625514},  # ADK River, ул. Казахстан, 62
+    {"latitude": 49.919752, "longitude": 82.627924},  # Maxi Mall, пр. Сатпаева, 51
 ]
 
 TARIFFS = [
@@ -99,15 +82,14 @@ TARIFFS = [
 
 
 async def seed():
-    print("🌱  Initializing database...")
-    await init_db()
+    print("🌱  Resetting database...")
+    from app.models.base import Base
+    import app.models  # noqa: F401
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as db:
-        # Check if already seeded
-        result = await db.execute(select(User).limit(1))
-        if result.scalar_one_or_none():
-            print("⚠️  Database already has data. Skipping seed.")
-            return
 
         # Users
         print("👤  Creating users...")
