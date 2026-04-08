@@ -15,6 +15,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/map-proxy': {
+        target: 'http://testtaxi3.aparu.kz',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/map-proxy/, ''),
+      },
     },
   },
 })
