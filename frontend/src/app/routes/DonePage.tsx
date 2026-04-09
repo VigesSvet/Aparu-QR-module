@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
+import { getRepeatScanPath } from '@/lib/scanContext'
 
 export function DonePage() {
   const navigate = useNavigate()
@@ -53,7 +54,7 @@ export function DonePage() {
           </Button>
           <Button
             variant="third"
-            onClick={() => navigate('/scan/1')}
+            onClick={() => navigate(getRepeatScanPath())}
           >
             Заказать ещё раз
           </Button>

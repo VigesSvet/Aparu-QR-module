@@ -31,18 +31,3 @@ class UserOut(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
-
-
-class DriverProfileOut(BaseModel):
-    id: int
-    car_model: str
-    car_color: str
-    plate_number: str
-    rating: float
-    is_online: bool
-
-    model_config = {"from_attributes": True}
-
-
-class UserWithProfileOut(UserOut):
-    driver_profile: DriverProfileOut | None = None

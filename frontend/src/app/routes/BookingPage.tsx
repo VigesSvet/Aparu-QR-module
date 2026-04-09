@@ -6,6 +6,7 @@ import { useAuth } from '@/app/AuthContext'
 import { locations, tariffs as tariffsApi, orders, maps } from '@/lib/services/api'
 import type { LocationOut, TariffOut, GeocodeResultItem } from '@/lib/services/api'
 import { Button } from '@/components/Button'
+import { getActiveScanLocationId } from '@/lib/scanContext'
 
 interface Point {
   address: string
@@ -60,8 +61,11 @@ export function BookingPage() {
   // ── Data loading ──────────────────────────────────────
 
   useEffect(() => {
-    if (!user) { navigate('/login'); return }
-    const locId = parseInt(sessionStorage.getItem('aparu_scan_location') ?? '1', 10)
+    if (!user) {
+      navigate('/verify', { replace: true })
+      return
+    }
+    const locId = getActiveScanLocationId()
     Promise.all([locations.get(locId), tariffsApi.list()])
       .then(async ([loc, tList]) => {
         setQrLocation(loc)
@@ -80,7 +84,7 @@ export function BookingPage() {
           setPointA({ address: `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`, lat: loc.latitude, lng: loc.longitude })
         }
       })
-      .catch(() => navigate('/login'))
+      .catch(() => navigate('/verify', { replace: true }))
   }, [user, navigate])
 
   // ── Map init ──────────────────────────────────────────
@@ -387,7 +391,7 @@ export function BookingPage() {
           <div className="flex items-center justify-between mb-3">
             {routeInfo ? (
               <span className="text-sm text-text-muted">
-                {(routeInfo.distance / 1000).toFixed(1)} км · {Math.ceil(routeInfo.time / 60000)} мин
+                {(routeInfo.distance / 1000).toFixed(1)} км · {Math.floor(routeInfo.time / 1000 / 60)} мин {Math.round((routeInfo.time / 1000) % 60)} сек
               </span>
             ) : (
               <span className="text-sm text-text-muted">

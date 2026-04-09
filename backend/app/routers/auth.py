@@ -1,17 +1,10 @@
-"""
-Auth router — phone-based verification.
-
-POST /api/v1/auth/send-code   → send mock SMS
-POST /api/v1/auth/verify-code → verify code, return token
-GET  /api/v1/auth/me          → current user
-"""
+"""Auth router for phone-based verification."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.auth.security import (
     check_code,
@@ -27,7 +20,6 @@ from app.schemas.auth import (
     SendCodeRequest,
     SendCodeResponse,
     UserOut,
-    UserWithProfileOut,
     VerifyCodeRequest,
 )
 
@@ -35,36 +27,29 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
 
 @router.post("/send-code", response_model=SendCodeResponse)
-async def send_code(body: SendCodeRequest):
-    """Send a mock SMS verification code (always 1234)."""
-    code = store_code(body.phone)
+async def send_code(body: SendCodeRequest, db: AsyncSession = Depends(get_db)):
+    """Generate a mock SMS verification code and return it in the response."""
+    code = await store_code(db, body.phone)
     return SendCodeResponse(message="SMS code sent", code=code)
 
 
 @router.post("/verify-code", response_model=AuthResponse)
 async def verify_code(body: VerifyCodeRequest, db: AsyncSession = Depends(get_db)):
     """Verify the SMS code and return auth token."""
-    if not check_code(body.phone, body.code):
+    if not await check_code(db, body.phone, body.code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification code",
+            detail="Неверный код подтверждения",
         )
 
     phone_digits = normalize_phone(body.phone)
-
-    # Find or auto-create user
-    result = await db.execute(
-        select(User)
-        .options(selectinload(User.driver_profile))
-        .where(User.phone == phone_digits)
-    )
+    result = await db.execute(select(User).where(User.phone == phone_digits))
     user = result.scalar_one_or_none()
 
     if not user:
-        # Auto-register as regular user
         user = User(
             phone=phone_digits,
-            name=f"Пользователь",
+            name="Пользователь",
             role=UserRole.user,
         )
         db.add(user)
@@ -72,13 +57,10 @@ async def verify_code(body: VerifyCodeRequest, db: AsyncSession = Depends(get_db
         await db.refresh(user)
 
     token = create_token(user.id, user.role.value)
-    return AuthResponse(
-        token=token,
-        user=UserOut.model_validate(user),
-    )
+    return AuthResponse(token=token, user=UserOut.model_validate(user))
 
 
-@router.get("/me", response_model=UserWithProfileOut)
+@router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_user)):
     """Get current authenticated user."""
-    return UserWithProfileOut.model_validate(user)
+    return UserOut.model_validate(user)

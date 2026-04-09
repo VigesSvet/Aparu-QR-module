@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/app/AuthContext'
-import { orders, locations, tariffs, drivers as driversApi } from '@/lib/services/api'
-import type { OrderOut, LocationOut, TariffOut, UserWithProfile } from '@/lib/services/api'
+import { orders, locations, tariffs } from '@/lib/services/api'
+import type { OrderOut, LocationOut, TariffOut } from '@/lib/services/api'
 import { PageShell } from '@/components/PageShell'
 
 export function AdminDashboard() {
@@ -11,7 +11,6 @@ export function AdminDashboard() {
   const [orderList, setOrderList] = useState<OrderOut[]>([])
   const [locationList, setLocationList] = useState<LocationOut[]>([])
   const [tariffList, setTariffList] = useState<TariffOut[]>([])
-  const [driverList, setDriverList] = useState<UserWithProfile[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -23,13 +22,11 @@ export function AdminDashboard() {
       orders.list(),
       locations.list(),
       tariffs.list(),
-      driversApi.list(),
     ])
-      .then(([o, l, t, d]) => {
+      .then(([o, l, t]) => {
         setOrderList(o)
         setLocationList(l)
         setTariffList(t)
-        setDriverList(d)
       })
       .finally(() => setLoading(false))
   }, [user, navigate])
@@ -63,7 +60,6 @@ export function AdminDashboard() {
           </div>
         ) : (
           <>
-            {/* Stats */}
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Всего заказов" value={stats.total} color="bg-blue-50 text-blue-600" />
               <StatCard label="Активных" value={stats.active} color="bg-orange-50 text-brand-orange" />
@@ -71,7 +67,6 @@ export function AdminDashboard() {
               <StatCard label="Отменено" value={stats.cancelled} color="bg-red-50 text-red-500" />
             </div>
 
-            {/* Quick links */}
             <div className="flex flex-col gap-2">
               <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Управление</p>
               <Link to="/admin/orders" className="flex items-center justify-between rounded-card border border-gray-100 bg-white p-4 shadow-sm hover:border-brand-orange transition-colors">
@@ -104,34 +99,6 @@ export function AdminDashboard() {
                 </div>
                 <ChevronRightIcon />
               </Link>
-            </div>
-
-            {/* Drivers */}
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Водители</p>
-              {driverList.length === 0 ? (
-                <p className="text-sm text-text-muted">Нет водителей</p>
-              ) : (
-                driverList.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex items-center justify-between rounded-card border border-gray-100 bg-white p-4 shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center text-lg">🧑‍✈️</div>
-                      <div>
-                        <span className="font-medium text-text-primary text-sm">{d.name}</span>
-                        <p className="text-xs text-text-muted">
-                          {d.driver_profile?.car_model} · {d.driver_profile?.plate_number}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${d.driver_profile?.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {d.driver_profile?.is_online ? 'Онлайн' : 'Офлайн'}
-                    </span>
-                  </div>
-                ))
-              )}
             </div>
           </>
         )}

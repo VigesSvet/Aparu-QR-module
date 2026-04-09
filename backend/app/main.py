@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import maps, auth, locations, tariffs, orders, drivers
+from app.routers import maps, auth, locations, tariffs, orders
 
 
 # ── Lifespan ─────────────────────────────────────────────
@@ -59,7 +59,6 @@ app.include_router(maps.router)
 app.include_router(locations.router)
 app.include_router(tariffs.router)
 app.include_router(orders.router)
-app.include_router(drivers.router)
 
 
 # ── Health-check ─────────────────────────────────────────

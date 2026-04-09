@@ -25,7 +25,6 @@ class Order(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    driver_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     qr_location_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("qr_locations.id"), nullable=False
     )
@@ -47,8 +46,6 @@ class Order(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    # relationships
     user = relationship("User", back_populates="orders_as_user", foreign_keys=[user_id])
-    driver = relationship("User", back_populates="orders_as_driver", foreign_keys=[driver_id])
     qr_location = relationship("QRLocation")
     tariff = relationship("Tariff")

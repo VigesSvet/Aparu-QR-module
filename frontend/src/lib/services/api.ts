@@ -29,7 +29,7 @@ async function request<T = unknown>(
   }
 
   if (_token) {
-    headers['Authorization'] = `Bearer ${_token}`
+    headers.Authorization = `Bearer ${_token}`
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -53,8 +53,6 @@ export class ApiError extends Error {
   }
 }
 
-// ── Auth ─────────────────────────────────────────────────
-
 export interface SendCodeResponse {
   message: string
   code: string | null
@@ -64,21 +62,8 @@ export interface UserOut {
   id: number
   phone: string
   name: string
-  role: 'admin' | 'driver' | 'user'
+  role: 'admin' | 'user'
   is_active: boolean
-}
-
-export interface DriverProfileOut {
-  id: number
-  car_model: string
-  car_color: string
-  plate_number: string
-  rating: number
-  is_online: boolean
-}
-
-export interface UserWithProfile extends UserOut {
-  driver_profile: DriverProfileOut | null
 }
 
 export interface AuthResponse {
@@ -99,13 +84,13 @@ export const auth = {
       body: JSON.stringify({ phone, code }),
     }),
 
-  me: () => request<UserWithProfile>('/api/v1/auth/me'),
+  me: () => request<UserOut>('/api/v1/auth/me'),
 }
-
-// ── Locations ────────────────────────────────────────────
 
 export interface LocationOut {
   id: number
+  name?: string
+  address?: string
   latitude: number
   longitude: number
   is_active: boolean
@@ -115,15 +100,13 @@ export interface LocationOut {
 export const locations = {
   list: () => request<LocationOut[]>('/api/v1/locations'),
   get: (id: number) => request<LocationOut>(`/api/v1/locations/${id}`),
-  create: (data: { latitude: number; longitude: number }) =>
+  create: (data: { name?: string; address?: string; latitude: number; longitude: number }) =>
     request<LocationOut>('/api/v1/locations', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<LocationOut>) =>
     request<LocationOut>(`/api/v1/locations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: number) =>
     request<void>(`/api/v1/locations/${id}`, { method: 'DELETE' }),
 }
-
-// ── Tariffs ──────────────────────────────────────────────
 
 export interface TariffOut {
   id: number
@@ -144,12 +127,9 @@ export const tariffs = {
     request<void>(`/api/v1/tariffs/${id}`, { method: 'DELETE' }),
 }
 
-// ── Orders ───────────────────────────────────────────────
-
 export interface OrderOut {
   id: number
   user_id: number
-  driver_id: number | null
   qr_location_id: number
   tariff_id: number
   destination_address: string
@@ -160,7 +140,6 @@ export interface OrderOut {
   created_at: string
   updated_at: string
   user_name: string | null
-  driver_name: string | null
   location_name: string | null
   tariff_name: string | null
 }
@@ -175,16 +154,12 @@ export const orders = {
     destination_lat?: number
     destination_lng?: number
   }) => request<OrderOut>('/api/v1/orders', { method: 'POST', body: JSON.stringify(data) }),
-  assign: (id: number) =>
-    request<OrderOut>(`/api/v1/orders/${id}/assign`, { method: 'PATCH' }),
   updateStatus: (id: number, status: string) =>
     request<OrderOut>(`/api/v1/orders/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
 }
-
-// ── Maps ─────────────────────────────────────────────────
 
 export interface GeocodeResultItem {
   address: string
@@ -224,12 +199,4 @@ export const maps = {
       method: 'POST',
       body: JSON.stringify({ points }),
     }),
-}
-
-// ── Drivers ──────────────────────────────────────────────
-
-export const drivers = {
-  me: () => request<UserWithProfile>('/api/v1/drivers/me'),
-  toggleOnline: () => request<DriverProfileOut>('/api/v1/drivers/me/online', { method: 'PATCH' }),
-  list: () => request<UserWithProfile[]>('/api/v1/drivers'),
 }

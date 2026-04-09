@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/app/AuthContext'
+import { clearSelectedTariff, saveScanLocation } from '@/lib/scanContext'
 
 export function ScanPage() {
   const { locationId = '1' } = useParams<{ locationId: string }>()
@@ -17,8 +18,8 @@ export function ScanPage() {
       return
     }
 
-    sessionStorage.setItem('aparu_scan_location', String(id))
-    sessionStorage.removeItem('aparu_scan_tariff')
+    saveScanLocation(id)
+    clearSelectedTariff()
 
     if (user) {
       navigate('/booking', { replace: true })

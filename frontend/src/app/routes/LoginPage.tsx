@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/app/AuthContext'
 import { auth as authApi } from '@/lib/services/api'
@@ -8,15 +8,43 @@ import { PageShell } from '@/components/PageShell'
 
 type Step = 'phone' | 'code'
 
+const RESEND_COOLDOWN_SECONDS = 15
+
+function getPhoneDigits(phone: string) {
+  return phone.replace(/\D/g, '')
+}
+
+function formatCooldown(seconds: number) {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
+  const [generatedCode, setGeneratedCode] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [codeError, setCodeError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+
+  useEffect(() => {
+    if (step !== 'code' || resendCooldown <= 0) return
+    const timer = window.setInterval(() => {
+      setResendCooldown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer)
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [step, resendCooldown])
 
   function formatPhone(raw: string) {
     const digits = raw.replace(/\D/g, '').slice(0, 11)
@@ -33,17 +61,22 @@ export function LoginPage() {
     return out
   }
 
-  async function handleSendCode() {
-    const digits = phone.replace(/\D/g, '')
+  async function sendCode() {
+    const digits = getPhoneDigits(phone)
     if (digits.length < 10) {
       setPhoneError('Введите корректный номер телефона')
       return
     }
+
     setPhoneError('')
+    setCodeError('')
     setLoading(true)
     try {
-      await authApi.sendCode(digits)
+      const response = await authApi.sendCode(digits)
+      setGeneratedCode(response.code ?? '')
+      setCode('')
       setStep('code')
+      setResendCooldown(RESEND_COOLDOWN_SECONDS)
     } catch (e: any) {
       setPhoneError(e.message ?? 'Ошибка отправки кода')
     } finally {
@@ -56,23 +89,13 @@ export function LoginPage() {
       setCodeError('Введите 4-значный код из SMS')
       return
     }
+
     setCodeError('')
     setLoading(true)
     try {
-      const digits = phone.replace(/\D/g, '')
+      const digits = getPhoneDigits(phone)
       const res = await login(digits, code)
-      // Route based on role
-      switch (res.user.role) {
-        case 'admin':
-          navigate('/admin')
-          break
-        case 'driver':
-          navigate('/driver')
-          break
-        default:
-          navigate('/scan/1')
-          break
-      }
+      navigate(res.user.role === 'admin' ? '/admin' : '/scan/1')
     } catch (e: any) {
       setCodeError(e.message ?? 'Неверный код')
     } finally {
@@ -80,9 +103,17 @@ export function LoginPage() {
     }
   }
 
+  function resetToPhoneStep() {
+    setStep('phone')
+    setCode('')
+    setGeneratedCode('')
+    setPhoneError('')
+    setCodeError('')
+    setResendCooldown(0)
+  }
+
   return (
     <PageShell>
-      {/* Header */}
       <header className="flex flex-col items-center px-4 pt-12 pb-6">
         <div className="w-16 h-16 rounded-2xl bg-brand-orange flex items-center justify-center mb-4 shadow-lg">
           <span className="text-white text-2xl font-bold">A</span>
@@ -114,7 +145,7 @@ export function LoginPage() {
 
             <div className="flex-1" />
 
-            <Button onClick={handleSendCode} disabled={phone.length < 3 || loading}>
+            <Button onClick={sendCode} disabled={getPhoneDigits(phone).length < 10 || loading}>
               {loading ? 'Отправка...' : 'Получить код'}
             </Button>
           </>
@@ -122,7 +153,7 @@ export function LoginPage() {
           <>
             <div>
               <button
-                onClick={() => { setStep('phone'); setCode(''); setCodeError('') }}
+                onClick={resetToPhoneStep}
                 className="text-sm text-text-muted mb-2 flex items-center gap-1"
               >
                 <ChevronLeftIcon /> Назад
@@ -138,9 +169,10 @@ export function LoginPage() {
               <input
                 type="text"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 pattern="[0-9]*"
                 maxLength={4}
-                placeholder="1 2 3 4"
+                placeholder="* * * *"
                 value={code}
                 onChange={(e) => {
                   setCode(e.target.value.replace(/\D/g, '').slice(0, 4))
@@ -149,9 +181,9 @@ export function LoginPage() {
                 autoFocus
                 className={[
                   'w-full h-14 rounded-btn border bg-white',
-                  'text-3xl font-bold text-text-primary text-center tracking-[0.4em]',
-                  'placeholder:text-text-muted placeholder:font-normal placeholder:tracking-[0.4em] placeholder:text-2xl',
-                  'transition-colors outline-none',
+                  'text-3xl font-bold text-text-primary text-center tracking-[0.45em]',
+                  'placeholder:text-text-muted placeholder:font-normal placeholder:tracking-[0.45em] placeholder:text-2xl',
+                  'transition-colors outline-none px-4',
                   codeError
                     ? 'border-red-500 focus:border-red-500'
                     : 'border-brand-muted focus:border-brand-orange',
@@ -160,9 +192,28 @@ export function LoginPage() {
               {codeError && <p className="text-sm text-red-500">{codeError}</p>}
             </div>
 
-            <p className="text-xs text-text-muted text-center">
-              Код для тестирования: <span className="font-bold text-brand-orange">1234</span>
-            </p>
+            {generatedCode && (
+              <p className="text-xs text-text-muted text-center">
+                Ваш код: <span className="font-bold text-brand-orange">{generatedCode}</span>
+              </p>
+            )}
+
+            <div className="flex flex-col items-center gap-1">
+              <button
+                onClick={sendCode}
+                disabled={loading || resendCooldown > 0}
+                className="text-sm text-text-muted text-center underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+              >
+                {loading
+                  ? 'Отправляем новый код...'
+                  : resendCooldown > 0
+                    ? `Запросить новый код через ${formatCooldown(resendCooldown)}`
+                    : 'Отправить код повторно'}
+              </button>
+              {resendCooldown > 0 && (
+                <p className="text-xs text-text-muted">Новый код будет доступен после таймера</p>
+              )}
+            </div>
 
             <div className="flex-1" />
 

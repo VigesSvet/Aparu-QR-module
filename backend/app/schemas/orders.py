@@ -22,7 +22,6 @@ class OrderStatusUpdate(BaseModel):
 class OrderOut(BaseModel):
     id: int
     user_id: int
-    driver_id: int | None
     qr_location_id: int
     tariff_id: int
     destination_address: str
@@ -35,7 +34,6 @@ class OrderOut(BaseModel):
 
     # Nested info (filled via from_attributes)
     user_name: str | None = None
-    driver_name: str | None = None
     location_name: str | None = None
     tariff_name: str | None = None
 

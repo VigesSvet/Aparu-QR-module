@@ -38,7 +38,6 @@ export function AdminOrders() {
       </header>
 
       <main className="flex flex-col flex-1 px-4 gap-4 pb-8">
-        {/* Filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {[
             { key: 'all', label: 'Все' },
@@ -89,7 +88,7 @@ export function AdminOrders() {
                     </p>
                     <div className="flex justify-between text-xs text-text-muted">
                       <span>Пассажир: {order.user_name ?? '—'}</span>
-                      <span>Водитель: {order.driver_name ?? '—'}</span>
+                      <span>Статус: {st.label}</span>
                     </div>
                     <div className="flex justify-between text-xs text-text-muted">
                       <span>{order.tariff_name}</span>

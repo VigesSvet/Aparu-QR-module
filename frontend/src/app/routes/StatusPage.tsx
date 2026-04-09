@@ -6,6 +6,7 @@ import type { OrderOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { PageShell } from '@/components/PageShell'
+import { getRepeatScanPath } from '@/lib/scanContext'
 
 type OrderStatus = 'searching' | 'assigned' | 'driving' | 'arrived' | 'completed' | 'cancelled'
 
@@ -17,10 +18,10 @@ const STATUS_STEPS: { key: OrderStatus; label: string }[] = [
 ]
 
 const STATUS_MESSAGES: Record<string, string> = {
-  searching: 'Ищем ближайшего водителя...',
-  assigned: 'Водитель назначен и выезжает',
-  driving: 'Водитель едет к вам',
-  arrived: 'Водитель ожидает вас у входа',
+  searching: 'Ищем машину...',
+  assigned: 'Заказ подтверждён',
+  driving: 'Машина едет к вам',
+  arrived: 'Машина ожидает у точки посадки',
   completed: 'Поездка завершена',
   cancelled: 'Заказ отменён',
 }
@@ -55,7 +56,6 @@ export function StatusPage() {
 
   useEffect(() => {
     loadOrder()
-    // Poll every 5 seconds
     const interval = setInterval(loadOrder, 5000)
     return () => clearInterval(interval)
   }, [loadOrder])
@@ -63,7 +63,13 @@ export function StatusPage() {
   async function handleCancel() {
     if (!order) return
     await orders.updateStatus(order.id, 'cancelled')
-    navigate('/scan/1')
+    navigate(getRepeatScanPath())
+  }
+
+  async function handleComplete() {
+    if (!order) return
+    await orders.updateStatus(order.id, 'completed')
+    navigate('/done')
   }
 
   if (loading) {
@@ -90,7 +96,6 @@ export function StatusPage() {
 
   return (
     <PageShell>
-      {/* Header */}
       <header className="flex items-center justify-between px-4 pt-6 pb-4">
         <div>
           <p className="text-xs text-text-muted font-medium">Заказ #{order.id}</p>
@@ -101,7 +106,6 @@ export function StatusPage() {
       </header>
 
       <main className="flex flex-col flex-1 px-4 gap-4 pb-8">
-        {/* Progress pills */}
         <div className="flex items-center gap-1.5">
           {STATUS_STEPS.map((step, idx) => {
             const done = idx <= currentIdx
@@ -127,22 +131,6 @@ export function StatusPage() {
           })}
         </div>
 
-        {/* Driver card */}
-        {order.driver_name && order.status !== 'searching' && (
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-surface-light flex items-center justify-center shrink-0 text-2xl">
-                🧑‍✈️
-              </div>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="font-medium text-base text-text-primary">{order.driver_name}</span>
-                <span className="text-sm text-text-muted">{order.tariff_name}</span>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Route summary */}
         <Card>
           <div className="flex flex-col gap-2.5">
             <RouteRow label="А" text={order.location_name ?? '—'} filled />
@@ -155,20 +143,18 @@ export function StatusPage() {
           </div>
         </Card>
 
-        {/* Arrived CTA */}
         {order.status === 'arrived' && (
           <Card warm>
             <p className="text-sm font-medium text-text-primary text-center">
-              Водитель ожидает вас. Садитесь поудобнее!
+              Машина на месте. Можно завершить эмуляцию поездки.
             </p>
           </Card>
         )}
 
         <div className="flex-1" />
 
-        {/* Actions */}
         {order.status === 'arrived' ? (
-          <Button onClick={() => navigate('/done')}>Завершить поездку</Button>
+          <Button onClick={handleComplete}>Завершить поездку</Button>
         ) : order.status === 'searching' ? (
           <Button variant="second-stroke" onClick={handleCancel}>
             Отменить заказ
