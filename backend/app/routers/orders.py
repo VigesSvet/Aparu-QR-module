@@ -37,12 +37,38 @@ USER_TRANSITIONS = {
 }
 
 
+def _calculate_order_price(
+    tariff: Tariff,
+    distance_meters: float | None,
+    duration_seconds: float | None,
+) -> int:
+    if distance_meters is None or duration_seconds is None:
+        return round(tariff.base_price)
+
+    distance_km = max(distance_meters, 0) / 1000
+    duration_minutes = max(duration_seconds, 0) / 60
+    included_distance = max(tariff.included_distance_km, 0)
+
+    if included_distance > 0:
+        extra_distance = max(distance_km - included_distance, 0)
+    else:
+        extra_distance = distance_km
+
+    extra_duration = max(duration_minutes - tariff.time_threshold_minutes, 0)
+
+    total = tariff.base_price
+    total += extra_distance * tariff.price_per_km
+    total += extra_duration * tariff.price_per_minute
+    return round(total)
+
+
 def _order_to_out(order: Order) -> OrderOut:
     return OrderOut(
         id=order.id,
         user_id=order.user_id,
         qr_location_id=order.qr_location_id,
         tariff_id=order.tariff_id,
+        tariff_period=order.tariff_period,
         destination_address=order.destination_address,
         destination_lat=order.destination_lat,
         destination_lng=order.destination_lng,
@@ -103,23 +129,30 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """User — create a new taxi order."""
+    """User - create a new taxi order."""
     loc = await db.get(QRLocation, body.qr_location_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
     tariff = await db.get(Tariff, body.tariff_id)
-    if not tariff:
+    if not tariff or not tariff.is_active:
         raise HTTPException(status_code=404, detail="Tariff not found")
+    if tariff.period != body.tariff_period:
+        raise HTTPException(status_code=400, detail="Tariff period does not match selected tariff")
 
     order = Order(
         user_id=user.id,
         qr_location_id=body.qr_location_id,
         tariff_id=body.tariff_id,
+        tariff_period=tariff.period,
         destination_address=body.destination_address,
         destination_lat=body.destination_lat,
         destination_lng=body.destination_lng,
-        price=tariff.base_price,
+        price=_calculate_order_price(
+            tariff,
+            body.route_distance_meters,
+            body.route_duration_seconds,
+        ),
         status=OrderStatus.searching,
     )
     db.add(order)

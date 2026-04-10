@@ -24,7 +24,9 @@ router = APIRouter(prefix="/api/v1/tariffs", tags=["Tariffs"])
 async def list_tariffs(db: AsyncSession = Depends(get_db)):
     """Public — list all active tariffs."""
     result = await db.execute(
-        select(Tariff).where(Tariff.is_active == True).order_by(Tariff.base_price)  # noqa: E712
+        select(Tariff)
+        .where(Tariff.is_active == True)  # noqa: E712
+        .order_by(Tariff.period, Tariff.name, Tariff.base_price)
     )
     return [TariffOut.model_validate(t) for t in result.scalars().all()]
 

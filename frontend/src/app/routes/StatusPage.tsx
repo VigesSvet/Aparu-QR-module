@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/app/AuthContext'
 import { orders } from '@/lib/services/api'
@@ -26,8 +26,12 @@ const STATUS_MESSAGES: Record<string, string> = {
   cancelled: 'Заказ отменён',
 }
 
-function statusIndex(s: string) {
-  return STATUS_STEPS.findIndex((step) => step.key === s)
+function statusIndex(status: string) {
+  return STATUS_STEPS.findIndex((step) => step.key === status)
+}
+
+function formatTariffPeriodLabel(period: OrderOut['tariff_period']) {
+  return period === 'night' ? 'Ночной' : 'Дневной'
 }
 
 export function StatusPage() {
@@ -42,11 +46,9 @@ export function StatusPage() {
   const loadOrder = useCallback(async () => {
     if (!orderId) return
     try {
-      const o = await orders.get(parseInt(orderId, 10))
-      setOrder(o)
-      if (o.status === 'completed') {
-        navigate('/done')
-      }
+      const currentOrder = await orders.get(parseInt(orderId, 10))
+      setOrder(currentOrder)
+      if (currentOrder.status === 'completed') navigate('/done')
     } catch (e: any) {
       setError(e.message ?? 'Ошибка загрузки заказа')
     } finally {
@@ -138,8 +140,14 @@ export function StatusPage() {
             <RouteRow label="Б" text={order.destination_address || '—'} filled={false} />
           </div>
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+            <span className="text-sm text-text-muted">Тариф</span>
+            <span className="text-sm font-medium text-text-primary">
+              {order.tariff_name ?? '—'} · {formatTariffPeriodLabel(order.tariff_period)}
+            </span>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
             <span className="text-sm text-text-muted">Стоимость</span>
-            <span className="text-sm font-medium text-text-primary">{order.price} ₸</span>
+            <span className="text-sm font-medium text-text-primary">{order.price} тг</span>
           </div>
         </Card>
 

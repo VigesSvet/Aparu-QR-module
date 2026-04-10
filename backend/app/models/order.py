@@ -9,6 +9,7 @@ from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.tariff import TariffPeriod
 
 
 class OrderStatus(str, enum.Enum):
@@ -29,6 +30,11 @@ class Order(Base):
         Integer, ForeignKey("qr_locations.id"), nullable=False
     )
     tariff_id: Mapped[int] = mapped_column(Integer, ForeignKey("tariffs.id"), nullable=False)
+    tariff_period: Mapped[TariffPeriod] = mapped_column(
+        Enum(TariffPeriod),
+        default=TariffPeriod.day,
+        nullable=False,
+    )
     destination_address: Mapped[str] = mapped_column(String(300), default="")
     destination_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     destination_lng: Mapped[float | None] = mapped_column(Float, nullable=True)

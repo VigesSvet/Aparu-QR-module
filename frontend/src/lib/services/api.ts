@@ -97,6 +97,8 @@ export interface LocationOut {
   created_at: string
 }
 
+export type TariffPeriod = 'day' | 'night'
+
 export const locations = {
   list: () => request<LocationOut[]>('/api/v1/locations'),
   get: (id: number) => request<LocationOut>(`/api/v1/locations/${id}`),
@@ -111,7 +113,14 @@ export const locations = {
 export interface TariffOut {
   id: number
   name: string
+  period: TariffPeriod
   base_price: number
+  included_distance_km: number
+  price_per_km: number
+  time_threshold_minutes: number
+  price_per_minute: number
+  free_waiting_minutes: number
+  waiting_price_per_minute: number
   currency: string
   description: string
   is_active: boolean
@@ -119,7 +128,19 @@ export interface TariffOut {
 
 export const tariffs = {
   list: () => request<TariffOut[]>('/api/v1/tariffs'),
-  create: (data: { name: string; base_price: number; currency?: string; description?: string }) =>
+  create: (data: {
+    name: string
+    period: TariffPeriod
+    base_price: number
+    included_distance_km?: number
+    price_per_km?: number
+    time_threshold_minutes?: number
+    price_per_minute?: number
+    free_waiting_minutes?: number
+    waiting_price_per_minute?: number
+    currency?: string
+    description?: string
+  }) =>
     request<TariffOut>('/api/v1/tariffs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<TariffOut>) =>
     request<TariffOut>(`/api/v1/tariffs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -132,6 +153,7 @@ export interface OrderOut {
   user_id: number
   qr_location_id: number
   tariff_id: number
+  tariff_period: TariffPeriod
   destination_address: string
   destination_lat: number | null
   destination_lng: number | null
@@ -150,9 +172,12 @@ export const orders = {
   create: (data: {
     qr_location_id: number
     tariff_id: number
+    tariff_period: TariffPeriod
     destination_address?: string
     destination_lat?: number
     destination_lng?: number
+    route_distance_meters?: number
+    route_duration_seconds?: number
   }) => request<OrderOut>('/api/v1/orders', { method: 'POST', body: JSON.stringify(data) }),
   updateStatus: (id: number, status: string) =>
     request<OrderOut>(`/api/v1/orders/${id}/status`, {

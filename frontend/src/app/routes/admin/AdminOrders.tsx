@@ -14,19 +14,26 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Отменён', color: 'bg-red-100 text-red-600' },
 }
 
+function formatTariffPeriodLabel(period: OrderOut['tariff_period']) {
+  return period === 'night' ? 'Ночь' : 'День'
+}
+
 export function AdminOrders() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [list, setList] = useState<OrderOut[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('all')
+  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    if (user?.role !== 'admin') { navigate('/login'); return }
+    if (user?.role !== 'admin') {
+      navigate('/login')
+      return
+    }
     orders.list().then(setList).finally(() => setLoading(false))
   }, [user, navigate])
 
-  const filtered = filter === 'all' ? list : list.filter((o) => o.status === filter)
+  const filtered = filter === 'all' ? list : list.filter((order) => order.status === filter)
 
   return (
     <PageShell>
@@ -46,18 +53,18 @@ export function AdminOrders() {
             { key: 'driving', label: 'В пути' },
             { key: 'completed', label: 'Завершён' },
             { key: 'cancelled', label: 'Отменён' },
-          ].map((f) => (
+          ].map((item) => (
             <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
+              key={item.key}
+              onClick={() => setFilter(item.key)}
               className={[
                 'text-xs font-medium px-3 py-1.5 rounded-full border whitespace-nowrap transition-colors',
-                filter === f.key
+                filter === item.key
                   ? 'bg-brand-orange text-white border-brand-orange'
                   : 'bg-white text-text-muted border-gray-200',
               ].join(' ')}
             >
-              {f.label}
+              {item.label}
             </button>
           ))}
         </div>
@@ -71,15 +78,17 @@ export function AdminOrders() {
         ) : (
           <div className="flex flex-col gap-2">
             {filtered.map((order) => {
-              const st = STATUS_LABELS[order.status] ?? { label: order.status, color: 'bg-gray-100 text-gray-600' }
+              const status = STATUS_LABELS[order.status] ?? {
+                label: order.status,
+                color: 'bg-gray-100 text-gray-600',
+              }
+
               return (
                 <div key={order.id} className="rounded-card border border-gray-100 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-text-muted">
-                      #{order.id}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>
-                      {st.label}
+                    <span className="text-xs font-medium text-text-muted">#{order.id}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.color}`}>
+                      {status.label}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -88,11 +97,13 @@ export function AdminOrders() {
                     </p>
                     <div className="flex justify-between text-xs text-text-muted">
                       <span>Пассажир: {order.user_name ?? '—'}</span>
-                      <span>Статус: {st.label}</span>
+                      <span>Статус: {status.label}</span>
                     </div>
                     <div className="flex justify-between text-xs text-text-muted">
-                      <span>{order.tariff_name}</span>
-                      <span className="font-medium text-text-primary">{order.price} ₸</span>
+                      <span>
+                        {order.tariff_name} · {formatTariffPeriodLabel(order.tariff_period)}
+                      </span>
+                      <span className="font-medium text-text-primary">{order.price} тг</span>
                     </div>
                   </div>
                 </div>
