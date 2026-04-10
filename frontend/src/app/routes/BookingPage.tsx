@@ -7,6 +7,7 @@ import { locations, tariffs as tariffsApi, orders, maps } from '@/lib/services/a
 import type {
   GeocodeResultItem,
   LocationOut,
+  OrderOut,
   TariffOut,
   TariffPeriod,
 } from '@/lib/services/api'
@@ -23,12 +24,26 @@ type ActiveField = 'A' | 'B'
 type RouteInfo = { distance: number; time: number }
 const TARIFF_ORDER = ['Эконом', 'Оптимал', 'Комфорт', 'Бизнес']
 
+const STATUS_STEPS: { key: string; label: string }[] = [
+  { key: 'searching', label: 'Поиск' },
+  { key: 'assigned', label: 'Назначен' },
+  { key: 'driving', label: 'Едет' },
+  { key: 'arrived', label: 'Прибыл' },
+]
+
+const STATUS_MESSAGES: Record<string, string> = {
+  searching: 'Ищем машину...',
+  assigned: 'Заказ подтверждён',
+  driving: 'Машина едет к вам',
+  arrived: 'Машина ожидает у точки посадки',
+}
+
 function getAutoTariffPeriod(now = new Date()): TariffPeriod {
   const hour = now.getHours()
   return hour >= 22 || hour < 6 ? 'night' : 'day'
 }
 
-function formatTariffPeriodLabel(period: TariffPeriod) {
+function formatTariffPeriodLabel(period: TariffPeriod | OrderOut['tariff_period']) {
   return period === 'night' ? 'Ночной' : 'Дневной'
 }
 
@@ -85,6 +100,8 @@ function getTaximeterLines(tariff: TariffOut) {
   return [firstLine, secondLine, thirdLine]
 }
 
+const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
+
 export function BookingPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -97,6 +114,17 @@ export function BookingPage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchSeqRef = useRef(0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const panelScrollRef = useRef<HTMLDivElement>(null)
+  const isProgrammaticMoveRef = useRef(false)
+  const pointARef = useRef<Point | null>(null)
+  const pointBRef = useRef<Point | null>(null)
+  const fieldTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [mapDragging, setMapDragging] = useState(false)
+  // displayField drives the floating marker visuals and lags behind activeField during pan
+  const [displayField, setDisplayField] = useState<ActiveField>('B')
+  // true while the camera is flying between fields — hides floating marker, keeps both static
+  const [isFieldTransitioning, setIsFieldTransitioning] = useState(false)
 
   const [dataLoading, setDataLoading] = useState(true)
   const [qrLocation, setQrLocation] = useState<LocationOut | null>(null)
@@ -115,6 +143,15 @@ export function BookingPage() {
   const [tariffInfoOpen, setTariffInfoOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+
+  const [activeOrderId, setActiveOrderId] = useState<number | null>(() => {
+    const stored = localStorage.getItem(ACTIVE_ORDER_KEY)
+    return stored ? parseInt(stored, 10) : null
+  })
+  const [activeOrder, setActiveOrder] = useState<OrderOut | null>(null)
+  const [panelPage, setPanelPage] = useState(0)
+  const [tripAnimated, setTripAnimated] = useState(false)
+  const [ratingValue, setRatingValue] = useState(0)
 
   useEffect(() => {
     if (!user) {
@@ -146,6 +183,44 @@ export function BookingPage() {
       .catch(() => navigate('/verify', { replace: true }))
   }, [user, navigate])
 
+  // Animate trip content in when order becomes active
+  useEffect(() => {
+    if (activeOrderId) {
+      setTripAnimated(false)
+      const t = setTimeout(() => setTripAnimated(true), 20)
+      return () => clearTimeout(t)
+    } else {
+      setTripAnimated(false)
+    }
+  }, [activeOrderId])
+
+  // Poll active order status
+  useEffect(() => {
+    if (!activeOrderId) return
+
+    async function poll() {
+      try {
+        const order = await orders.get(activeOrderId!)
+        setActiveOrder(order)
+        if (order.status === 'completed') {
+          localStorage.removeItem(ACTIVE_ORDER_KEY)
+          setActiveOrderId(null)
+          navigate('/done')
+        } else if (order.status === 'cancelled') {
+          localStorage.removeItem(ACTIVE_ORDER_KEY)
+          setActiveOrderId(null)
+          setActiveOrder(null)
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => clearInterval(interval)
+  }, [activeOrderId, navigate])
+
   useEffect(() => {
     if (!qrLocation || !mapContainerRef.current || mapRef.current) return
 
@@ -162,10 +237,6 @@ export function BookingPage() {
       },
     })
 
-    markerARef.current = new maplibregl.Marker({ color: '#FC6500' })
-      .setLngLat([qrLocation.longitude, qrLocation.latitude])
-      .addTo(map)
-
     map.on('load', () => {
       mapLoadedRef.current = true
       map.addSource('route', {
@@ -181,8 +252,21 @@ export function BookingPage() {
       })
     })
 
-    map.on('click', async (e) => {
-      const { lng, lat } = e.lngLat
+    map.on('movestart', () => {
+      if (!isProgrammaticMoveRef.current) {
+        setMapDragging(true)
+      }
+    })
+
+    map.on('moveend', async () => {
+      if (isProgrammaticMoveRef.current) {
+        isProgrammaticMoveRef.current = false
+        setMapDragging(false)
+        return
+      }
+      setMapDragging(false)
+
+      const { lng, lat } = map.getCenter()
       try {
         const res = await maps.reverseGeocode(lat, lng)
         const addr = [res.placeName, res.areaName].filter(Boolean).join(', ')
@@ -194,10 +278,8 @@ export function BookingPage() {
           else setPointB(point)
           return current
         })
-
-        setSearchOpen(false)
       } catch {
-        // Ignore reverse-geocode failures on map click.
+        // ignore
       }
     })
 
@@ -212,13 +294,72 @@ export function BookingPage() {
     }
   }, [qrLocation])
 
+  // Sync state → refs so pan/marker effects can read current values without stale closures
+  useEffect(() => { pointARef.current = pointA }, [pointA])
+  useEffect(() => { pointBRef.current = pointB }, [pointB])
+
+  // Show/hide maplibre markers:
+  // - Normally: only the INACTIVE point has a static marker
+  // - During field transition: BOTH points have static markers (target visible during flight)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !pointA) return
-    const apply = () => markerARef.current?.setLngLat([pointA.lng, pointA.lat])
-    if (mapLoadedRef.current) apply()
-    else map.once('load', apply)
-  }, [pointA])
+    if (!map) return
+
+    const showA = isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA)
+    const showB = isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB)
+
+    if (showA && pointA) {
+      if (markerARef.current) {
+        markerARef.current.setLngLat([pointA.lng, pointA.lat])
+      } else {
+        markerARef.current = new maplibregl.Marker({ color: '#FC6500' })
+          .setLngLat([pointA.lng, pointA.lat])
+          .addTo(map)
+      }
+    } else {
+      markerARef.current?.remove()
+      markerARef.current = null
+    }
+
+    if (showB && pointB) {
+      if (markerBRef.current) {
+        markerBRef.current.setLngLat([pointB.lng, pointB.lat])
+      } else {
+        markerBRef.current = new maplibregl.Marker({ color: '#2A3037' })
+          .setLngLat([pointB.lng, pointB.lat])
+          .addTo(map)
+      }
+    } else {
+      markerBRef.current?.remove()
+      markerBRef.current = null
+    }
+  }, [activeField, pointA, pointB, isFieldTransitioning])
+
+  // When switching active field:
+  //   1. isFieldTransitioning=true → floating marker hides, both static markers visible
+  //   2. camera flies to target point
+  //   3. after flight: isFieldTransitioning=false + displayField switches → static target
+  //      marker is replaced by floating center marker
+  useEffect(() => {
+    if (fieldTransitionTimerRef.current) clearTimeout(fieldTransitionTimerRef.current)
+
+    const map = mapRef.current
+    if (!map) return
+
+    const target = activeField === 'A' ? pointARef.current : pointBRef.current
+    if (target) {
+      setIsFieldTransitioning(true)
+      isProgrammaticMoveRef.current = true
+      map.easeTo({ center: [target.lng, target.lat], duration: 350 })
+      fieldTransitionTimerRef.current = setTimeout(() => {
+        setIsFieldTransitioning(false)
+        setDisplayField(activeField)
+      }, 350)
+    } else {
+      setIsFieldTransitioning(false)
+      setDisplayField(activeField)
+    }
+  }, [activeField]) // intentionally exclude pointA/pointB — only fire on field switch
 
   useEffect(() => {
     const map = mapRef.current
@@ -230,14 +371,6 @@ export function BookingPage() {
 
     function apply() {
       if (!map || !pointA || !pointB) return
-
-      if (markerBRef.current) {
-        markerBRef.current.setLngLat([pointB.lng, pointB.lat])
-      } else {
-        markerBRef.current = new maplibregl.Marker({ color: '#2A3037' })
-          .setLngLat([pointB.lng, pointB.lat])
-          .addTo(map)
-      }
 
       maps.route([
         { latitude: pointA.lat, longitude: pointA.lng },
@@ -251,25 +384,9 @@ export function BookingPage() {
             geometry: { type: 'LineString', coordinates: route.coordinates },
             properties: {},
           })
-
-          if (route.bbox && route.bbox.length === 4) {
-            const [minLng, minLat, maxLng, maxLat] = route.bbox
-            const bounds = new maplibregl.LngLatBounds([minLng, minLat], [maxLng, maxLat])
-            map.fitBounds(bounds, {
-              padding: { top: 80, bottom: 40, left: 60, right: 60 },
-              maxZoom: 16,
-            })
-          }
         })
         .catch(() => {
           setRouteInfo(null)
-          const bounds = new maplibregl.LngLatBounds()
-          bounds.extend([pointA.lng, pointA.lat])
-          bounds.extend([pointB.lng, pointB.lat])
-          map.fitBounds(bounds, {
-            padding: { top: 80, bottom: 40, left: 60, right: 60 },
-            maxZoom: 16,
-          })
         })
     }
 
@@ -353,6 +470,12 @@ export function BookingPage() {
     closeSearch()
   }
 
+  function handlePanelScroll() {
+    const el = panelScrollRef.current
+    if (!el) return
+    setPanelPage(Math.round(el.scrollLeft / el.offsetWidth))
+  }
+
   const visibleTariffs = getTariffsForPeriod(tariffList, selectedPeriod)
   const tariff = visibleTariffs.find((item) => item.id === selectedTariff) ?? null
   const selectedTariffPrice = tariff ? calculateTariffPrice(tariff, routeInfo) : null
@@ -378,12 +501,41 @@ export function BookingPage() {
         route_distance_meters: routeInfo?.distance,
         route_duration_seconds: routeInfo ? routeInfo.time / 1000 : undefined,
       })
-      navigate(`/status/${order.id}`)
+      localStorage.setItem(ACTIVE_ORDER_KEY, String(order.id))
+      setActiveOrderId(order.id)
+      setActiveOrder(order)
+      // Reset panel to slide 0 (trip slide)
+      setPanelPage(0)
+      if (panelScrollRef.current) panelScrollRef.current.scrollLeft = 0
     } catch (error: any) {
       setSubmitError(error.message ?? 'Ошибка создания заказа')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleCancelOrder() {
+    if (!activeOrder) return
+    try {
+      await orders.updateStatus(activeOrder.id, 'cancelled')
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem(ACTIVE_ORDER_KEY)
+    setActiveOrderId(null)
+    setActiveOrder(null)
+  }
+
+  async function handleCompleteOrder() {
+    if (!activeOrder) return
+    try {
+      await orders.updateStatus(activeOrder.id, 'completed')
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem(ACTIVE_ORDER_KEY)
+    setActiveOrderId(null)
+    navigate('/done')
   }
 
   if (dataLoading) {
@@ -394,10 +546,58 @@ export function BookingPage() {
     )
   }
 
+  const hasActiveTrip = !!activeOrder
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
       <div className="relative flex-1 min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
+
+        {/* Floating center marker — hidden during field transition */}
+        {!hasActiveTrip && !isFieldTransitioning && (
+          <div className="absolute inset-0 pointer-events-none z-10">
+            {/* Shadow dot at map center */}
+            <div
+              className="absolute left-1/2 top-1/2"
+              style={{
+                transform: `translateX(-50%) translateY(-50%) scale(${mapDragging ? 0.5 : 1})`,
+                transition: 'transform 0.2s ease-out',
+                width: 14,
+                height: 6,
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.22)',
+              }}
+            />
+            {/* Pin — tip aligned to map center */}
+            <div
+              className="absolute left-1/2 top-1/2 flex flex-col items-center"
+              style={{
+                transform: mapDragging
+                  ? 'translateX(-50%) translateY(calc(-100% - 10px))'
+                  : 'translateX(-50%) translateY(-100%)',
+                transition: 'transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              }}
+            >
+              <div
+                className={[
+                  'w-10 h-10 rounded-full flex items-center justify-center shadow-lg',
+                  displayField === 'A' ? 'bg-brand-orange' : 'bg-[#2A3037]',
+                ].join(' ')}
+              >
+                <span className="text-white text-sm font-bold">{displayField}</span>
+              </div>
+              {/* Triangle tail */}
+              <div
+                className="w-0 h-0"
+                style={{
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderTop: displayField === 'A' ? '10px solid #FC6500' : '10px solid #2A3037',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow-sm pointer-events-none">
           <span className="text-sm font-bold text-brand-orange tracking-tight">APARU</span>
@@ -411,124 +611,189 @@ export function BookingPage() {
           <ChevronLeftIcon />
         </button>
 
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-brand-dark/80 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full whitespace-nowrap pointer-events-none">
-          {activeField === 'A'
-            ? 'Нажмите на карту, чтобы изменить точку А'
-            : (!pointB ? 'Нажмите на карту, чтобы выбрать точку Б' : 'Нажмите на карту, чтобы изменить точку Б')}
-        </div>
+        {!hasActiveTrip && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-brand-dark/80 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full whitespace-nowrap pointer-events-none">
+            {displayField === 'A'
+              ? 'Переместите карту, чтобы изменить точку А'
+              : (!pointB ? 'Переместите карту, чтобы выбрать точку Б' : 'Переместите карту, чтобы изменить точку Б')}
+          </div>
+        )}
       </div>
 
+      {/* Bottom panel — 2-slide horizontal scroll */}
       <div className="bg-white rounded-t-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.10)] flex-shrink-0 z-20">
-        <div className="flex justify-center pt-3 pb-1">
+        <div className="flex justify-center pt-3 pb-2">
           <div className="w-10 h-1 rounded-full bg-gray-200" />
         </div>
 
-        <div className="px-4 pt-2 pb-1">
-          <PointRow
-            label="А"
-            labelBg="bg-brand-orange"
-            labelText="text-white"
-            address={pointA?.address}
-            placeholder="Откуда едем?"
-            active={activeField === 'A'}
-            onActivate={() => setActiveField('A')}
-            onOpenSearch={() => openSearch('A')}
-          />
-          <div className="ml-[0.875rem] w-px h-3 bg-gray-200 my-0.5" />
-          <PointRow
-            label="Б"
-            labelBg="bg-white border-2 border-brand-dark"
-            labelText="text-brand-dark"
-            address={pointB?.address}
-            placeholder="Куда едем?"
-            active={activeField === 'B'}
-            onActivate={() => setActiveField('B')}
-            onOpenSearch={() => openSearch('B')}
-          />
-        </div>
+        <div
+          ref={panelScrollRef}
+          className="flex overflow-x-auto"
+          style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}
+          onScroll={handlePanelScroll}
+        >
+          {/* ── Slide 0: booking form OR active trip ── */}
+          <div className="flex-shrink-0 w-full" style={{ scrollSnapAlign: 'start' }}>
+            {hasActiveTrip && activeOrder ? (
+              /* Trip view — slides in via opacity+translate transition */
+              <div
+                className="transition-all duration-300 ease-out"
+                style={{
+                  opacity: tripAnimated ? 1 : 0,
+                  transform: tripAnimated ? 'translateX(0)' : 'translateX(24px)',
+                }}
+              >
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
+                  Самое важное
+                </p>
+                <div className="px-4 pb-4">
+                  <TripSlide
+                    order={activeOrder}
+                    ratingValue={ratingValue}
+                    onRate={setRatingValue}
+                    onCancel={handleCancelOrder}
+                    onComplete={handleCompleteOrder}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Booking form */
+              <div>
+                <div className="px-4 pt-0 pb-1">
+                  <PointRow
+                    label="А"
+                    labelBg="bg-brand-orange"
+                    labelText="text-white"
+                    address={pointA?.address}
+                    placeholder="Откуда едем?"
+                    active={activeField === 'A'}
+                    onActivate={() => setActiveField('A')}
+                    onOpenSearch={() => openSearch('A')}
+                  />
+                  <div className="ml-[0.875rem] w-px h-3 bg-gray-200 my-0.5" />
+                  <PointRow
+                    label="Б"
+                    labelBg="bg-white border-2 border-brand-dark"
+                    labelText="text-brand-dark"
+                    address={pointB?.address}
+                    placeholder="Куда едем?"
+                    active={activeField === 'B'}
+                    onActivate={() => setActiveField('B')}
+                    onOpenSearch={() => openSearch('B')}
+                  />
+                </div>
 
-        <div className="px-4 py-2 border-t border-gray-100">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <button
-              type="button"
-              onClick={() => setTariffInfoOpen(true)}
-              className="inline-flex items-center gap-2 text-sm font-medium text-text-primary"
-            >
-              <TariffInfoIcon />
-              Тариф
-            </button>
-            <button
-              type="button"
-              onClick={() => setTariffInfoOpen(true)}
-              className="w-7 h-7 rounded-full border border-gray-200 text-text-muted flex items-center justify-center"
-              aria-label="Открыть условия тарифа"
-            >
-              ?
-            </button>
-            <div className="inline-flex rounded-full bg-gray-100 p-1">
-              {(['day', 'night'] as TariffPeriod[]).map((period) => (
-                <button
-                  key={period}
-                  type="button"
-                  onClick={() => handlePeriodChange(period)}
-                  className={[
-                    'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-                    selectedPeriod === period
-                      ? 'bg-white text-brand-orange shadow-sm'
-                      : 'text-text-muted',
-                  ].join(' ')}
-                >
-                  {period === 'day' ? 'День' : 'Ночь'}
-                </button>
-              ))}
+                <div className="px-4 py-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setTariffInfoOpen(true)}
+                      className="inline-flex items-center gap-2 text-sm font-medium text-text-primary"
+                    >
+                      <TariffInfoIcon />
+                      Тариф
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTariffInfoOpen(true)}
+                      className="w-7 h-7 rounded-full border border-gray-200 text-text-muted flex items-center justify-center"
+                      aria-label="Открыть условия тарифа"
+                    >
+                      ?
+                    </button>
+                    <div className="inline-flex rounded-full bg-gray-100 p-1">
+                      {(['day', 'night'] as TariffPeriod[]).map((period) => (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => handlePeriodChange(period)}
+                          className={[
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                            selectedPeriod === period
+                              ? 'bg-white text-brand-orange shadow-sm'
+                              : 'text-text-muted',
+                          ].join(' ')}
+                        >
+                          {period === 'day' ? 'День' : 'Ночь'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+                    {visibleTariffs.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedTariff(item.id)}
+                        className={[
+                          'flex-shrink-0 flex flex-col items-center px-4 py-2 rounded-xl border transition-colors min-w-[92px]',
+                          item.id === selectedTariff
+                            ? 'border-brand-orange bg-surface-warm'
+                            : 'border-gray-100 bg-white',
+                        ].join(' ')}
+                      >
+                        <span className="text-sm font-medium text-text-primary">{item.name}</span>
+                        <span className="text-xs text-text-muted mt-0.5">
+                          {formatPrice(calculateTariffPrice(item, routeInfo), item.currency)}
+                        </span>
+                      </button>
+                    ))}
+                    {visibleTariffs.length === 0 && (
+                      <div className="py-2 text-sm text-text-muted">Нет тарифов для выбранного периода</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-4 pt-2 pb-6 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-3 gap-4">
+                    {routeInfo ? (
+                      <span className="text-sm text-text-muted">{formatRouteMeta(routeInfo)}</span>
+                    ) : (
+                      <span className="text-sm text-text-muted">
+                        {pointB ? 'Считаем маршрут...' : 'Выберите точку назначения'}
+                      </span>
+                    )}
+                    {tariff && selectedTariffPrice !== null && (
+                      <span className="font-semibold text-base text-text-primary whitespace-nowrap">
+                        {formatPrice(selectedTariffPrice, tariff.currency)}
+                      </span>
+                    )}
+                  </div>
+
+                  <Button onClick={handleConfirm} disabled={!pointA || !pointB || submitting}>
+                    {submitting ? 'Оформление...' : 'Заказать такси'}
+                  </Button>
+                  {submitError && <p className="text-xs text-red-500 text-center mt-2">{submitError}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Slide 1: weather & surcharge (inactive appearance during active trip) ── */}
+          <div className="flex-shrink-0 w-full" style={{ scrollSnapAlign: 'start' }}>
+            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
+              Самое важное
+            </p>
+            <div className="px-4 pb-4">
+              <WeatherSlide inactive={hasActiveTrip} />
             </div>
           </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-            {visibleTariffs.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSelectedTariff(item.id)}
-                className={[
-                  'flex-shrink-0 flex flex-col items-center px-4 py-2 rounded-xl border transition-colors min-w-[92px]',
-                  item.id === selectedTariff
-                    ? 'border-brand-orange bg-surface-warm'
-                    : 'border-gray-100 bg-white',
-                ].join(' ')}
-              >
-                <span className="text-sm font-medium text-text-primary">{item.name}</span>
-                <span className="text-xs text-text-muted mt-0.5">
-                  {formatPrice(calculateTariffPrice(item, routeInfo), item.currency)}
-                </span>
-              </button>
-            ))}
-            {visibleTariffs.length === 0 && (
-              <div className="py-2 text-sm text-text-muted">Нет тарифов для выбранного периода</div>
-            )}
-          </div>
         </div>
 
-        <div className="px-4 pt-2 pb-6 border-t border-gray-100">
-          <div className="flex items-center justify-between mb-3 gap-4">
-            {routeInfo ? (
-              <span className="text-sm text-text-muted">{formatRouteMeta(routeInfo)}</span>
-            ) : (
-              <span className="text-sm text-text-muted">
-                {pointB ? 'Считаем маршрут...' : 'Выберите точку назначения'}
-              </span>
-            )}
-
-            {tariff && selectedTariffPrice !== null && (
-              <span className="font-semibold text-base text-text-primary whitespace-nowrap">
-                {formatPrice(selectedTariffPrice, tariff.currency)}
-              </span>
-            )}
-          </div>
-
-          <Button onClick={handleConfirm} disabled={!pointA || !pointB || submitting}>
-            {submitting ? 'Оформление...' : 'Заказать такси'}
-          </Button>
-          {submitError && <p className="text-xs text-red-500 text-center mt-2">{submitError}</p>}
+        {/* Page dots — always 2 slides */}
+        <div className="flex justify-center gap-1.5 py-2">
+          <div
+            className={[
+              'rounded-full transition-all duration-200',
+              panelPage === 0 ? 'w-4 h-1.5 bg-brand-orange' : 'w-1.5 h-1.5 bg-gray-300',
+            ].join(' ')}
+          />
+          <div
+            className={[
+              'rounded-full transition-all duration-200',
+              panelPage === 1 ? 'w-4 h-1.5 bg-brand-orange' : 'w-1.5 h-1.5 bg-gray-300',
+            ].join(' ')}
+          />
         </div>
       </div>
 
@@ -631,6 +896,168 @@ export function BookingPage() {
     </div>
   )
 }
+
+// ─── Widget slides ────────────────────────────────────────────────────────────
+
+function TripSlide({
+  order,
+  ratingValue,
+  onRate,
+  onCancel,
+  onComplete,
+}: {
+  order: OrderOut
+  ratingValue: number
+  onRate: (v: number) => void
+  onCancel: () => void
+  onComplete: () => void
+}) {
+  const currentIdx = STATUS_STEPS.findIndex((s) => s.key === order.status)
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-3 pb-2">
+        <p className="text-[11px] text-text-muted font-medium">Заказ #{order.id}</p>
+        <p className="text-[15px] font-bold text-text-primary leading-tight mt-0.5">
+          {STATUS_MESSAGES[order.status] ?? order.status}
+        </p>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5">
+          {STATUS_STEPS.map((step, idx) => {
+            const done = idx <= currentIdx
+            const active = idx === currentIdx
+            return (
+              <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className={[
+                    'w-full h-1.5 rounded-full transition-colors',
+                    done ? 'bg-brand-orange' : 'bg-gray-200',
+                  ].join(' ')}
+                />
+                <span
+                  className={[
+                    'text-[10px] font-medium',
+                    active ? 'text-brand-orange' : done ? 'text-text-muted' : 'text-gray-300',
+                  ].join(' ')}
+                >
+                  {step.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Route + details */}
+      <div className="mx-4 mb-3 rounded-xl bg-surface-base px-3 py-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-brand-orange flex items-center justify-center shrink-0">
+              <span className="text-[9px] font-bold text-white">А</span>
+            </div>
+            <span className="text-xs font-medium text-text-primary truncate">{order.location_name ?? '—'}</span>
+          </div>
+          <div className="w-px h-2.5 bg-gray-200 ml-2.5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-5 h-5 rounded-full border-2 border-brand-dark flex items-center justify-center shrink-0">
+              <span className="text-[9px] font-bold text-brand-dark">Б</span>
+            </div>
+            <span className="text-xs font-medium text-text-primary truncate">{order.destination_address || '—'}</span>
+          </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
+          <span className="text-[11px] text-text-muted">
+            {order.tariff_name ?? '—'} · {formatTariffPeriodLabel(order.tariff_period)}
+          </span>
+          <span className="text-[11px] font-semibold text-text-primary">{order.price} тг</span>
+        </div>
+      </div>
+
+      {/* Action button */}
+      {order.status === 'arrived' ? (
+        <div className="px-4 mb-3">
+          <button
+            onClick={onComplete}
+            className="w-full h-10 rounded-full bg-brand-orange text-white text-sm font-medium"
+          >
+            Завершить поездку
+          </button>
+        </div>
+      ) : order.status === 'searching' ? (
+        <div className="px-4 mb-3">
+          <button
+            onClick={onCancel}
+            className="w-full h-10 rounded-full border-2 border-gray-200 text-text-muted text-sm font-medium"
+          >
+            Отменить заказ
+          </button>
+        </div>
+      ) : null}
+
+      {/* Rating */}
+      <div className="mx-4 mb-3 pt-3 border-t border-gray-100">
+        <p className="text-xs text-text-muted mb-2">Оцените сервис</p>
+        <div className="flex gap-1.5">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              onClick={() => onRate(star)}
+              className="text-xl leading-none"
+              aria-label={`${star} звезда`}
+            >
+              <span className={star <= ratingValue ? 'text-brand-orange' : 'text-gray-300'}>★</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* App download */}
+      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
+          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
+        </div>
+        <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
+          <span className="text-white text-xs font-bold">A</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WeatherSlide({ inactive }: { inactive: boolean }) {
+  return (
+    <div
+      className={[
+        'rounded-2xl border border-gray-100 bg-white px-4 py-3 flex items-center justify-between gap-4 transition-opacity duration-300',
+        inactive ? 'opacity-40' : 'opacity-100',
+      ].join(' ')}
+    >
+      {/* Left: weather */}
+      <div className="flex items-center gap-2">
+        <WeatherIcon />
+        <div>
+          <p className="text-xl font-bold text-text-primary leading-none">—°C</p>
+          <p className="text-[11px] text-text-muted mt-0.5">Погода</p>
+        </div>
+      </div>
+
+      <div className="w-px h-10 bg-gray-100" />
+
+      {/* Right: surcharge */}
+      <div className="text-right">
+        <p className="text-xl font-bold text-text-primary leading-none">+—%</p>
+        <p className="text-[11px] text-text-muted mt-0.5">Наценка</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Booking-form inner components ────────────────────────────────────────────
 
 interface PointRowProps {
   label: string
@@ -735,6 +1162,8 @@ function TariffModal({
   )
 }
 
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
 function ChevronLeftIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -822,6 +1251,22 @@ function TariffInfoIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+function WeatherIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-text-muted">
+      <circle cx="16" cy="16" r="6" stroke="currentColor" strokeWidth="1.8" />
+      <line x1="16" y1="2" x2="16" y2="5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="16" y1="27" x2="16" y2="30" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="2" y1="16" x2="5" y2="16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="27" y1="16" x2="30" y2="16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="6.34" y1="6.34" x2="8.46" y2="8.46" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="23.54" y1="23.54" x2="25.66" y2="25.66" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="25.66" y1="6.34" x2="23.54" y2="8.46" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="8.46" y1="23.54" x2="6.34" y2="25.66" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
