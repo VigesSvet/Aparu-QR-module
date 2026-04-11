@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/app/AuthContext'
 import { locations, tariffs as tariffsApi, orders, maps } from '@/lib/services/api'
 import type {
   GeocodeResultItem,
@@ -12,6 +11,7 @@ import type {
   TariffPeriod,
 } from '@/lib/services/api'
 import { Button } from '@/components/Button'
+import { CheckoutModal } from '@/components/CheckoutModal'
 import { getActiveScanLocationId } from '@/lib/scanContext'
 
 interface Point {
@@ -104,7 +104,6 @@ const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
 
 export function BookingPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -116,6 +115,7 @@ export function BookingPage() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelScrollRef = useRef<HTMLDivElement>(null)
   const isProgrammaticMoveRef = useRef(false)
+  const hasActiveOrderRef = useRef(false)
   const pointARef = useRef<Point | null>(null)
   const pointBRef = useRef<Point | null>(null)
   const fieldTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -143,6 +143,7 @@ export function BookingPage() {
   const [tariffInfoOpen, setTariffInfoOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
 
   const [activeOrderId, setActiveOrderId] = useState<number | null>(() => {
     const stored = localStorage.getItem(ACTIVE_ORDER_KEY)
@@ -154,11 +155,6 @@ export function BookingPage() {
   const [ratingValue, setRatingValue] = useState(0)
 
   useEffect(() => {
-    if (!user) {
-      navigate('/verify', { replace: true })
-      return
-    }
-
     const locId = getActiveScanLocationId()
 
     Promise.all([locations.get(locId), tariffsApi.list()])
@@ -180,8 +176,8 @@ export function BookingPage() {
           })
         }
       })
-      .catch(() => navigate('/verify', { replace: true }))
-  }, [user, navigate])
+      .catch(() => setDataLoading(false))
+  }, [])
 
   // Animate trip content in when order becomes active
   useEffect(() => {
@@ -266,6 +262,8 @@ export function BookingPage() {
       }
       setMapDragging(false)
 
+      if (hasActiveOrderRef.current) return
+
       const { lng, lat } = map.getCenter()
       try {
         const res = await maps.reverseGeocode(lat, lng)
@@ -297,6 +295,7 @@ export function BookingPage() {
   // Sync state → refs so pan/marker effects can read current values without stale closures
   useEffect(() => { pointARef.current = pointA }, [pointA])
   useEffect(() => { pointBRef.current = pointB }, [pointB])
+  useEffect(() => { hasActiveOrderRef.current = !!activeOrderId }, [activeOrderId])
 
   // Show/hide maplibre markers:
   // - Normally: only the INACTIVE point has a static marker
@@ -305,8 +304,9 @@ export function BookingPage() {
     const map = mapRef.current
     if (!map) return
 
-    const showA = isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA)
-    const showB = isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB)
+    const hasActiveOrder = !!activeOrderId
+    const showA = hasActiveOrder ? !!pointA : (isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA))
+    const showB = hasActiveOrder ? !!pointB : (isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB))
 
     if (showA && pointA) {
       if (markerARef.current) {
@@ -333,7 +333,7 @@ export function BookingPage() {
       markerBRef.current?.remove()
       markerBRef.current = null
     }
-  }, [activeField, pointA, pointB, isFieldTransitioning])
+  }, [activeField, pointA, pointB, isFieldTransitioning, activeOrderId])
 
   // When switching active field:
   //   1. isFieldTransitioning=true → floating marker hides, both static markers visible
@@ -484,7 +484,13 @@ export function BookingPage() {
     setSelectedPeriod(period)
   }
 
-  async function handleConfirm() {
+  function handleConfirm() {
+    if (!pointA || !pointB || !tariff) return
+    setSubmitError('')
+    setCheckoutOpen(true)
+  }
+
+  async function handleCreateOrder() {
     if (!pointA || !pointB || !tariff) return
 
     setSubmitError('')
@@ -504,6 +510,7 @@ export function BookingPage() {
       localStorage.setItem(ACTIVE_ORDER_KEY, String(order.id))
       setActiveOrderId(order.id)
       setActiveOrder(order)
+      setCheckoutOpen(false)
       // Reset panel to slide 0 (trip slide)
       setPanelPage(0)
       if (panelScrollRef.current) panelScrollRef.current.scrollLeft = 0
@@ -649,6 +656,8 @@ export function BookingPage() {
                 <div className="px-4 pb-4">
                   <TripSlide
                     order={activeOrder}
+                    pickupAddress={pointA?.address ?? activeOrder.location_name ?? '—'}
+                    destinationAddress={pointB?.address ?? activeOrder.destination_address}
                     ratingValue={ratingValue}
                     onRate={setRatingValue}
                     onCancel={handleCancelOrder}
@@ -893,6 +902,15 @@ export function BookingPage() {
           onClose={() => setTariffInfoOpen(false)}
         />
       )}
+
+      {checkoutOpen && (
+        <CheckoutModal
+          onClose={() => { setCheckoutOpen(false); setSubmitError('') }}
+          onConfirm={handleCreateOrder}
+          submitting={submitting}
+          submitError={submitError}
+        />
+      )}
     </div>
   )
 }
@@ -901,12 +919,16 @@ export function BookingPage() {
 
 function TripSlide({
   order,
+  pickupAddress,
+  destinationAddress,
   ratingValue,
   onRate,
   onCancel,
   onComplete,
 }: {
   order: OrderOut
+  pickupAddress: string
+  destinationAddress: string
   ratingValue: number
   onRate: (v: number) => void
   onCancel: () => void
@@ -959,14 +981,14 @@ function TripSlide({
             <div className="w-5 h-5 rounded-full bg-brand-orange flex items-center justify-center shrink-0">
               <span className="text-[9px] font-bold text-white">А</span>
             </div>
-            <span className="text-xs font-medium text-text-primary truncate">{order.location_name ?? '—'}</span>
+            <span className="text-xs font-medium text-text-primary truncate">{pickupAddress}</span>
           </div>
           <div className="w-px h-2.5 bg-gray-200 ml-2.5" />
           <div className="flex items-center gap-2.5">
             <div className="w-5 h-5 rounded-full border-2 border-brand-dark flex items-center justify-center shrink-0">
               <span className="text-[9px] font-bold text-brand-dark">Б</span>
             </div>
-            <span className="text-xs font-medium text-text-primary truncate">{order.destination_address || '—'}</span>
+            <span className="text-xs font-medium text-text-primary truncate">{destinationAddress || '—'}</span>
           </div>
         </div>
         <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
