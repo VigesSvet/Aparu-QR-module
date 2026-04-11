@@ -14,6 +14,39 @@ import { Button } from '@/components/Button'
 import { CheckoutModal } from '@/components/CheckoutModal'
 import { getActiveScanLocationId } from '@/lib/scanContext'
 
+const DECORATIVE_CAR_COORDINATES: Array<[number, number]> = [
+  [82.603283, 49.902706],
+  [82.599506, 49.895408],
+  [82.590408, 49.889879],
+  [82.610493, 49.889547],
+  [82.622509, 49.88634],
+  [82.627487, 49.906908],
+  [82.640362, 49.914425],
+  [82.612038, 49.916414],
+  [82.614613, 49.905139],
+  [82.620964, 49.92813],
+  [82.592297, 49.932439],
+  [82.621822, 49.937964],
+  [82.627144, 49.947464],
+  [82.617702, 49.948679],
+  [82.588863, 49.947906],
+  [82.64637, 49.948569],
+  [82.610664, 49.946581],
+  [82.636414, 49.960497],
+  [82.634354, 49.942714],
+  [82.594013, 49.953539],
+  [82.586975, 49.964914],
+  [82.628174, 49.963368],
+  [82.645855, 49.962374],
+  [82.568951, 49.989532],
+  [82.543545, 49.954423],
+  [82.555733, 49.983793],
+  [82.602596, 49.967675],
+  [82.660618, 49.947796],
+  [82.59058, 49.96646],
+  [82.621994, 49.954975],
+]
+
 interface Point {
   address: string
   lat: number
@@ -100,6 +133,25 @@ function getTaximeterLines(tariff: TariffOut) {
   return [firstLine, secondLine, thirdLine]
 }
 
+function getDecorativeCarSvg() {
+  return `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M21.5651 8.66667H19.2133L18.5878 6.93333C17.9373 5.14667 16.311 4 14.5096 4H9.55583C7.75444 4 6.1532 5.14667 5.47768 6.93333L4.82718 8.66667H2.47537C2.22517 8.66667 2 8.88 2 9.17333C2 9.2 2 9.25333 2.02502 9.28L2.25019 10.2933C2.30023 10.5067 2.50039 10.6667 2.70054 10.6667H3.52618C2.97575 11.1733 2.6505 11.8933 2.6505 12.6667V14.6667C2.6505 15.3067 2.87568 15.92 3.27598 16.4267V18.6667C3.27598 19.4133 3.82641 20 4.52695 20H5.77791C6.47845 20 7.02888 19.4133 7.02888 18.6667V17.3333H17.0366V18.6667C17.0366 19.4133 17.587 20 18.2876 20H19.5385C20.2391 20 20.7895 19.4133 20.7895 18.6667V16.4C21.1898 15.92 21.415 15.3067 21.415 14.64V12.64C21.415 11.8667 21.0897 11.1467 20.5393 10.64H21.3149C21.5401 10.64 21.7152 10.48 21.7652 10.2667L21.9904 9.25333C22.0405 8.98667 21.8903 8.72 21.6401 8.64C21.6401 8.66667 21.6151 8.66667 21.5651 8.66667ZM7.80447 7.92C8.07969 7.14667 8.78023 6.66667 9.55583 6.66667H14.5096C15.2852 6.66667 15.9858 7.17333 16.261 7.92L17.0366 10H7.02888L7.80447 7.92ZM5.77791 14.6667C5.12741 14.72 4.57699 14.1867 4.52695 13.4933C4.52695 13.44 4.52695 13.3867 4.52695 13.3333C4.47691 12.64 4.9773 12.0533 5.6278 12H5.77791C6.52849 12 7.65436 13.2 7.65436 14C7.65436 14.8 6.52849 14.6667 5.77791 14.6667ZM18.2876 14.6667C17.537 14.6667 16.4111 14.8 16.4111 14C16.4111 13.2 17.537 12 18.2876 12C18.9381 11.9467 19.4885 12.48 19.5385 13.1733V13.3333C19.5886 14.0267 19.0882 14.6133 18.4377 14.6667C18.3876 14.6667 18.3376 14.6667 18.2876 14.6667Z" fill="#FC6500"/>
+    </svg>
+  `.trim()
+}
+
+function createDecorativeCarElement(rotation: number) {
+  const el = document.createElement('div')
+  el.style.width = '24px'
+  el.style.height = '24px'
+  el.style.pointerEvents = 'none'
+  el.style.transform = `rotate(${rotation}deg)`
+  el.style.transformOrigin = 'center'
+  el.innerHTML = getDecorativeCarSvg()
+  return el
+}
+
 const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
 
 export function BookingPage() {
@@ -110,6 +162,7 @@ export function BookingPage() {
   const mapLoadedRef = useRef(false)
   const markerARef = useRef<maplibregl.Marker | null>(null)
   const markerBRef = useRef<maplibregl.Marker | null>(null)
+  const decorativeMarkersRef = useRef<maplibregl.Marker[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchSeqRef = useRef(0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -242,6 +295,15 @@ export function BookingPage() {
 
     map.on('load', () => {
       mapLoadedRef.current = true
+      decorativeMarkersRef.current = DECORATIVE_CAR_COORDINATES.map(([lng, lat], index) => (
+        new maplibregl.Marker({
+          element: createDecorativeCarElement((index * 29) % 360),
+          anchor: 'center',
+        })
+          .setLngLat([lng, lat])
+          .addTo(map)
+      ))
+
       map.addSource('route', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -294,6 +356,7 @@ export function BookingPage() {
       map.remove()
       mapRef.current = null
       mapLoadedRef.current = false
+      decorativeMarkersRef.current = []
       markerARef.current = null
       markerBRef.current = null
     }
