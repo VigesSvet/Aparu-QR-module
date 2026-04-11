@@ -4,7 +4,6 @@ import { ScanPage } from './routes/ScanPage'
 import { VerifyPage } from './routes/VerifyPage'
 import { BookingPage } from './routes/BookingPage'
 import { StatusPage } from './routes/StatusPage'
-import { DonePage } from './routes/DonePage'
 import { AdminDashboard } from './routes/admin/AdminDashboard'
 import { AdminOrders } from './routes/admin/AdminOrders'
 import { AdminLocations } from './routes/admin/AdminLocations'
@@ -19,7 +18,6 @@ export function App() {
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/status/:orderId" element={<StatusPage />} />
-          <Route path="/done" element={<DonePage />} />
 
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/orders" element={<AdminOrders />} />

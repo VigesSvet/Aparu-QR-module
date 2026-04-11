@@ -12,7 +12,7 @@ import type {
 } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { CheckoutModal } from '@/components/CheckoutModal'
-import { getActiveScanLocationId } from '@/lib/scanContext'
+import { getActiveScanLocationId, getRepeatScanPath } from '@/lib/scanContext'
 
 const DECORATIVE_CAR_COORDINATES: Array<[number, number]> = [
   [82.603283, 49.902706],
@@ -55,6 +55,12 @@ interface Point {
 
 type ActiveField = 'A' | 'B'
 type RouteInfo = { distance: number; time: number }
+
+interface CompletedSummary {
+  price: number
+  waitSeconds: number
+  tripSeconds: number | null
+}
 const TARIFF_ORDER = ['Эконом', 'Оптимал', 'Комфорт', 'Бизнес']
 
 const STATUS_STEPS: { key: string; label: string }[] = [
@@ -194,6 +200,8 @@ export function BookingPage() {
   const pointBRef = useRef<Point | null>(null)
   const fieldTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevOrderStatusRef = useRef<string | null>(null)
+  const arrivedAtRef = useRef<number | null>(null)
+  const routeInfoRef = useRef<RouteInfo | null>(null)
 
   const [mapDragging, setMapDragging] = useState(false)
   // displayField drives the floating marker visuals and lags behind activeField during pan
@@ -228,6 +236,7 @@ export function BookingPage() {
   const [panelPage, setPanelPage] = useState(0)
   const [tripAnimated, setTripAnimated] = useState(false)
   const [ratingValue, setRatingValue] = useState(0)
+  const [completedSummary, setCompletedSummary] = useState<CompletedSummary | null>(null)
 
   useEffect(() => {
     const locId = getActiveScanLocationId()
@@ -284,11 +293,25 @@ export function BookingPage() {
           showStatusNotification(order.status)
         }
         prevOrderStatusRef.current = order.status
+
+        if (order.status === 'arrived' && arrivedAtRef.current === null) {
+          arrivedAtRef.current = Date.now()
+        }
+
         setActiveOrder(order)
         if (order.status === 'completed') {
+          const waitSeconds = arrivedAtRef.current
+            ? (Date.now() - arrivedAtRef.current) / 1000
+            : 0
+          setCompletedSummary({
+            price: order.price,
+            waitSeconds,
+            tripSeconds: routeInfoRef.current ? routeInfoRef.current.time / 1000 : null,
+          })
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
-          navigate('/done')
+          setActiveOrder(null)
+          arrivedAtRef.current = null
         } else if (order.status === 'cancelled') {
           showStatusNotification('cancelled')
           localStorage.removeItem(ACTIVE_ORDER_KEY)
@@ -303,7 +326,7 @@ export function BookingPage() {
     poll()
     const interval = setInterval(poll, 5000)
     return () => clearInterval(interval)
-  }, [activeOrderId, navigate])
+  }, [activeOrderId])
 
   useEffect(() => {
     if (!qrLocation || !mapContainerRef.current || mapRef.current) return
@@ -394,6 +417,7 @@ export function BookingPage() {
   useEffect(() => { pointARef.current = pointA }, [pointA])
   useEffect(() => { pointBRef.current = pointB }, [pointB])
   useEffect(() => { hasActiveOrderRef.current = !!activeOrderId }, [activeOrderId])
+  useEffect(() => { routeInfoRef.current = routeInfo }, [routeInfo])
 
   // Show/hide maplibre markers:
   // - Normally: only the INACTIVE point has a static marker
@@ -635,14 +659,23 @@ export function BookingPage() {
 
   async function handleCompleteOrder() {
     if (!activeOrder) return
+    const waitSeconds = arrivedAtRef.current
+      ? (Date.now() - arrivedAtRef.current) / 1000
+      : 0
     try {
       await orders.updateStatus(activeOrder.id, 'completed')
     } catch {
       // ignore
     }
+    setCompletedSummary({
+      price: activeOrder.price,
+      waitSeconds,
+      tripSeconds: routeInfo ? routeInfo.time / 1000 : null,
+    })
     localStorage.removeItem(ACTIVE_ORDER_KEY)
     setActiveOrderId(null)
-    navigate('/done')
+    setActiveOrder(null)
+    arrivedAtRef.current = null
   }
 
   if (dataLoading) {
@@ -739,9 +772,25 @@ export function BookingPage() {
           style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}
           onScroll={handlePanelScroll}
         >
-          {/* ── Slide 0: booking form OR active trip ── */}
+          {/* ── Slide 0: booking form OR active trip OR completed summary ── */}
           <div className="flex-shrink-0 w-full" style={{ scrollSnapAlign: 'start' }}>
-            {hasActiveTrip && activeOrder ? (
+            {completedSummary ? (
+              /* Completed summary — shown in-place after trip ends */
+              <div className="transition-all duration-300 ease-out" style={{ opacity: 1 }}>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
+                  Самое важное
+                </p>
+                <div className="px-4 pb-4">
+                  <CompletedSlide
+                    summary={completedSummary}
+                    onRepeat={() => {
+                      setCompletedSummary(null)
+                      navigate(getRepeatScanPath())
+                    }}
+                  />
+                </div>
+              </div>
+            ) : hasActiveTrip && activeOrder ? (
               /* Trip view — slides in via opacity+translate transition */
               <div
                 className="transition-all duration-300 ease-out"
@@ -1135,6 +1184,75 @@ function TripSlide({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* App download */}
+      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
+          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
+        </div>
+        <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
+          <span className="text-white text-xs font-bold">A</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CompletedSlide({
+  summary,
+  onRepeat,
+}: {
+  summary: CompletedSummary
+  onRepeat: () => void
+}) {
+  function formatSeconds(totalSeconds: number) {
+    const m = Math.floor(totalSeconds / 60)
+    const s = Math.round(totalSeconds % 60)
+    if (m === 0) return `${s} сек`
+    return `${m} мин ${s} сек`
+  }
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+      {/* Success header */}
+      <div className="px-4 pt-4 pb-3 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-surface-warm flex items-center justify-center text-xl shrink-0">
+          ✅
+        </div>
+        <div>
+          <p className="text-[15px] font-bold text-text-primary leading-tight">Поездка завершена</p>
+          <p className="text-xs text-text-muted mt-0.5">Спасибо, что воспользовались APARU</p>
+        </div>
+      </div>
+
+      {/* Trip stats */}
+      <div className="mx-4 mb-3 rounded-xl bg-surface-base px-3 py-3 flex flex-col gap-0">
+        <div className="flex items-center justify-between py-2">
+          <span className="text-xs text-text-muted">Ожидание водителя</span>
+          <span className="text-xs font-semibold text-text-primary">{formatSeconds(summary.waitSeconds)}</span>
+        </div>
+        {summary.tripSeconds !== null && (
+          <div className="flex items-center justify-between py-2 border-t border-gray-100">
+            <span className="text-xs text-text-muted">Время в пути</span>
+            <span className="text-xs font-semibold text-text-primary">{formatSeconds(summary.tripSeconds)}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between py-2 border-t border-gray-100">
+          <span className="text-xs text-text-muted">Итоговая стоимость</span>
+          <span className="text-sm font-bold text-brand-orange">{formatPrice(summary.price)}</span>
+        </div>
+      </div>
+
+      {/* Repeat order button */}
+      <div className="px-4 mb-3">
+        <button
+          onClick={onRepeat}
+          className="w-full h-10 rounded-full bg-brand-orange text-white text-sm font-medium"
+        >
+          Повторить заказ
+        </button>
       </div>
 
       {/* App download */}
