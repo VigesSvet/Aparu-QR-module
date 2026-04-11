@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useNavigate } from 'react-router-dom'
-import { locations, tariffs as tariffsApi, orders, maps } from '@/lib/services/api'
+import { locations, tariffs as tariffsApi, orders, maps, getToken } from '@/lib/services/api'
 import type {
   GeocodeResultItem,
   LocationOut,
@@ -193,6 +193,13 @@ export function BookingPage() {
   // Poll active order status
   useEffect(() => {
     if (!activeOrderId) return
+
+    // Unauthenticated users can't have active orders — clear stale localStorage entry
+    if (!getToken()) {
+      localStorage.removeItem(ACTIVE_ORDER_KEY)
+      setActiveOrderId(null)
+      return
+    }
 
     async function poll() {
       try {
