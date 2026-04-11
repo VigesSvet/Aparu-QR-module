@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './AuthContext'
-import { LoginPage } from './routes/LoginPage'
 import { ScanPage } from './routes/ScanPage'
 import { VerifyPage } from './routes/VerifyPage'
 import { BookingPage } from './routes/BookingPage'
@@ -16,8 +15,6 @@ export function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-
           <Route path="/scan/:locationId" element={<ScanPage />} />
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/booking" element={<BookingPage />} />
@@ -29,7 +26,7 @@ export function App() {
           <Route path="/admin/locations" element={<AdminLocations />} />
           <Route path="/admin/tariffs" element={<AdminTariffs />} />
 
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/booking" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
