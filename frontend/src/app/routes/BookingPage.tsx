@@ -154,6 +154,27 @@ function createDecorativeCarElement(rotation: number) {
 
 const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
 
+const NOTIFICATION_MESSAGES: Record<string, { title: string; body: string }> = {
+  assigned: { title: 'Водитель назначен', body: 'Заказ подтверждён, водитель принял заказ' },
+  driving: { title: 'Водитель едет к вам', body: 'Машина уже в пути к точке посадки' },
+  arrived: { title: 'Машина прибыла', body: 'Водитель ожидает вас у точки посадки' },
+  cancelled: { title: 'Заказ отменён', body: 'Ваш заказ был отменён' },
+}
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
+function showStatusNotification(status: string) {
+  if (!('Notification' in window)) return
+  if (Notification.permission !== 'granted') return
+  const msg = NOTIFICATION_MESSAGES[status]
+  if (!msg) return
+  new Notification(msg.title, { body: msg.body, icon: '/favicon.ico' })
+}
+
 export function BookingPage() {
   const navigate = useNavigate()
 
@@ -172,6 +193,7 @@ export function BookingPage() {
   const pointARef = useRef<Point | null>(null)
   const pointBRef = useRef<Point | null>(null)
   const fieldTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevOrderStatusRef = useRef<string | null>(null)
 
   const [mapDragging, setMapDragging] = useState(false)
   // displayField drives the floating marker visuals and lags behind activeField during pan
@@ -257,12 +279,18 @@ export function BookingPage() {
     async function poll() {
       try {
         const order = await orders.get(activeOrderId!)
+        const prevStatus = prevOrderStatusRef.current
+        if (prevStatus !== null && prevStatus !== order.status) {
+          showStatusNotification(order.status)
+        }
+        prevOrderStatusRef.current = order.status
         setActiveOrder(order)
         if (order.status === 'completed') {
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
           navigate('/done')
         } else if (order.status === 'cancelled') {
+          showStatusNotification('cancelled')
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
           setActiveOrder(null)
@@ -578,6 +606,8 @@ export function BookingPage() {
         route_duration_seconds: routeInfo ? routeInfo.time / 1000 : undefined,
       })
       localStorage.setItem(ACTIVE_ORDER_KEY, String(order.id))
+      prevOrderStatusRef.current = order.status
+      requestNotificationPermission()
       setActiveOrderId(order.id)
       setActiveOrder(order)
       setCheckoutOpen(false)

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/app/AuthContext'
 import { auth as authApi } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 
-type Step = 'phone' | 'code' | 'payment'
+type PhoneState = 'input' | 'code'
 type PaymentMethod = 'cash' | 'card'
 
 const RESEND_COOLDOWN_SECONDS = 15
@@ -43,9 +43,9 @@ interface CheckoutModalProps {
 export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: CheckoutModalProps) {
   const { user, login } = useAuth()
 
-  // Always start at phone step — pre-fill if already authenticated
-  const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState(() => user ? formatPhone(user.phone) : '')
+  const [phoneState, setPhoneState] = useState<PhoneState>('input')
+  const [verified, setVerified] = useState(() => !!user)
   const [code, setCode] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
   const [phoneError, setPhoneError] = useState('')
@@ -54,24 +54,32 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   const [resendCooldown, setResendCooldown] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
 
-  // If user signs in while modal is open (edge case), sync phone field
+  const codeInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync phone when user authenticates while modal is open
   useEffect(() => {
     if (user && !phone) setPhone(formatPhone(user.phone))
+    if (user) setVerified(true)
   }, [user, phone])
 
+  // Resend cooldown timer
   useEffect(() => {
-    if (step !== 'code' || resendCooldown <= 0) return
+    if (phoneState !== 'code' || resendCooldown <= 0) return
     const timer = window.setInterval(() => {
-      setResendCooldown((current) => {
-        if (current <= 1) {
-          window.clearInterval(timer)
-          return 0
-        }
-        return current - 1
+      setResendCooldown((c) => {
+        if (c <= 1) { window.clearInterval(timer); return 0 }
+        return c - 1
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [step, resendCooldown])
+  }, [phoneState, resendCooldown])
+
+  // Focus code input when switching to code state
+  useEffect(() => {
+    if (phoneState === 'code') {
+      setTimeout(() => codeInputRef.current?.focus(), 50)
+    }
+  }, [phoneState])
 
   async function sendCode() {
     const digits = getPhoneDigits(phone)
@@ -85,25 +93,26 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
       const response = await authApi.sendCode(digits)
       setGeneratedCode(response.code ?? '')
       setCode('')
-      setStep('code')
+      setCodeError('')
+      setPhoneState('code')
       setResendCooldown(RESEND_COOLDOWN_SECONDS)
     } catch (e: any) {
-      setPhoneError(e.message ?? 'Ошибка')
+      setPhoneError(e.message ?? 'Ошибка отправки кода')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleVerifyCode() {
+  async function verifyCode() {
     if (code.length < 4) {
-      setCodeError('Введите 4-значный код из SMS')
+      setCodeError('Введите 4-значный код')
       return
     }
     setCodeError('')
     setLoading(true)
     try {
       await login(getPhoneDigits(phone), code)
-      setStep('payment')
+      setVerified(true)
     } catch (e: any) {
       setCodeError(e.message ?? 'Неверный код')
     } finally {
@@ -111,15 +120,15 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
     }
   }
 
-  function handleBack() {
-    if (step === 'code') {
-      setStep('phone')
-      setCode('')
-      setCodeError('')
-    } else {
-      onClose()
-    }
+  function resetPhone() {
+    setPhoneState('input')
+    setCode('')
+    setCodeError('')
+    setGeneratedCode('')
+    setVerified(false)
   }
+
+  const phoneReady = getPhoneDigits(phone).length >= 10
 
   const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
     { id: 'cash', label: 'Наличные', icon: '💵' },
@@ -141,89 +150,129 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
         {/* Header */}
         <div className="flex items-center gap-2 px-4 pt-2 pb-4">
           <button
-            onClick={handleBack}
+            onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-text-muted shrink-0"
-            aria-label="Назад"
+            aria-label="Закрыть"
           >
             <ChevronLeftIcon />
           </button>
           <div>
-            <h2 className="text-lg font-bold text-text-primary leading-tight">
-              {step === 'phone' && 'Ваш номер телефона'}
-              {step === 'code' && 'Введите код из SMS'}
-              {step === 'payment' && 'Оформление заказа'}
-            </h2>
-            <p className="text-sm text-text-muted mt-0.5">
-              {step === 'phone' && (user ? 'Подтвердите свой номер' : 'Мы отправим код подтверждения')}
-              {step === 'code' && `Код отправлен на ${phone}`}
-              {step === 'payment' && 'Выберите способ оплаты'}
-            </p>
+            <h2 className="text-lg font-bold text-text-primary leading-tight">Оформление заказа</h2>
+            <p className="text-sm text-text-muted mt-0.5">Выберите способ оплаты</p>
           </div>
         </div>
 
         <div className="px-4 pb-8 flex flex-col gap-5">
-          {/* ── Phone step ── */}
-          {step === 'phone' && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-text-primary">Телефон</label>
-                <input
-                  type="tel"
-                  placeholder="+7 (___) ___-__-__"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(formatPhone(e.target.value))
-                    if (phoneError) setPhoneError('')
-                  }}
-                  autoFocus={!user}
-                  readOnly={!!user}
-                  className={[
-                    'w-full h-12 rounded-btn border bg-white px-4',
-                    'text-base font-medium text-text-primary placeholder:text-text-muted placeholder:font-normal',
-                    'transition-colors outline-none',
-                    user ? 'bg-gray-50 text-text-muted cursor-default' : '',
-                    phoneError
-                      ? 'border-red-500 focus:border-red-500'
-                      : 'border-brand-muted focus:border-brand-orange',
-                  ].join(' ')}
-                />
+          {/* Payment methods */}
+          <div className="flex flex-col gap-2">
+            {PAYMENT_METHODS.map((method) => (
+              <button
+                key={method.id}
+                onClick={() => setPaymentMethod(method.id)}
+                className={[
+                  'flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left',
+                  paymentMethod === method.id
+                    ? 'border-brand-orange bg-surface-warm'
+                    : 'border-gray-100 bg-white',
+                ].join(' ')}
+              >
+                <span className="text-xl leading-none">{method.icon}</span>
+                <span className="text-sm font-medium text-text-primary flex-1">{method.label}</span>
+                {paymentMethod === method.id && <CheckIcon />}
+              </button>
+            ))}
+          </div>
+
+          {/* Phone / Code section */}
+          <div className="flex flex-col gap-2">
+            {phoneState === 'input' ? (
+              <>
+                <label className="text-sm font-medium text-text-primary">Номер телефона</label>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    placeholder="+7 (___) ___-__-__"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(formatPhone(e.target.value))
+                      if (phoneError) setPhoneError('')
+                    }}
+                    readOnly={verified && !!user}
+                    className={[
+                      'flex-1 h-12 rounded-btn border bg-white px-4',
+                      'text-base font-medium text-text-primary placeholder:text-text-muted placeholder:font-normal',
+                      'transition-colors outline-none',
+                      verified && user ? 'bg-gray-50 text-text-muted cursor-default' : '',
+                      phoneError
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'border-brand-muted focus:border-brand-orange',
+                    ].join(' ')}
+                  />
+                  {!verified && (
+                    <button
+                      onClick={sendCode}
+                      disabled={!phoneReady || loading}
+                      className={[
+                        'h-12 px-4 rounded-btn text-sm font-medium transition-colors shrink-0',
+                        phoneReady && !loading
+                          ? 'bg-brand-orange text-white'
+                          : 'bg-gray-100 text-text-muted cursor-default',
+                      ].join(' ')}
+                    >
+                      {loading ? '...' : 'Получить код'}
+                    </button>
+                  )}
+                </div>
                 {phoneError && <p className="text-sm text-red-500">{phoneError}</p>}
-              </div>
-
-              {user ? (
-                <Button onClick={() => setStep('payment')}>
-                  Продолжить
-                </Button>
-              ) : (
-                <Button onClick={sendCode} disabled={getPhoneDigits(phone).length < 10 || loading}>
-                  {loading ? 'Отправка...' : 'Получить код'}
-                </Button>
-              )}
-            </>
-          )}
-
-          {/* ── Code step ── */}
-          {step === 'code' && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-text-primary">Код подтверждения</label>
+                {verified && (
+                  <button
+                    onClick={resetPhone}
+                    className="text-xs text-brand-orange underline underline-offset-2 self-start"
+                  >
+                    Изменить номер
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-text-primary">
+                    Код из SMS на {phone}
+                  </label>
+                  <button
+                    onClick={resetPhone}
+                    className="text-xs text-brand-orange underline underline-offset-2"
+                  >
+                    Изменить
+                  </button>
+                </div>
                 <input
+                  ref={codeInputRef}
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   pattern="[0-9]*"
                   maxLength={4}
-                  placeholder="* * * *"
+                  placeholder="· · · ·"
                   value={code}
                   onChange={(e) => {
-                    setCode(e.target.value.replace(/\D/g, '').slice(0, 4))
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 4)
+                    setCode(val)
                     if (codeError) setCodeError('')
+                    if (val.length === 4) {
+                      // auto-verify when 4 digits entered
+                      setCodeError('')
+                      setLoading(true)
+                      login(getPhoneDigits(phone), val)
+                        .then(() => setVerified(true))
+                        .catch((err: any) => setCodeError(err.message ?? 'Неверный код'))
+                        .finally(() => setLoading(false))
+                    }
                   }}
-                  autoFocus
                   className={[
                     'w-full h-14 rounded-btn border bg-white',
                     'text-3xl font-bold text-text-primary text-center tracking-[0.45em]',
-                    'placeholder:text-text-muted placeholder:font-normal placeholder:tracking-[0.45em] placeholder:text-2xl',
+                    'placeholder:text-text-muted placeholder:font-normal placeholder:tracking-[0.3em] placeholder:text-2xl',
                     'transition-colors outline-none px-4',
                     codeError
                       ? 'border-red-500 focus:border-red-500'
@@ -231,62 +280,33 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                   ].join(' ')}
                 />
                 {codeError && <p className="text-sm text-red-500">{codeError}</p>}
-              </div>
 
-              {generatedCode && (
-                <p className="text-xs text-text-muted text-center">
-                  Ваш код: <span className="font-bold text-brand-orange">{generatedCode}</span>
-                </p>
-              )}
+                {generatedCode && (
+                  <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface-warm border border-brand-muted">
+                    <span className="text-xs text-text-muted">Демо-код</span>
+                    <span className="text-base font-bold tracking-[0.25em] text-brand-orange">{generatedCode}</span>
+                  </div>
+                )}
 
-              <div className="flex flex-col items-center gap-1">
                 <button
                   onClick={sendCode}
                   disabled={loading || resendCooldown > 0}
-                  className="text-sm text-text-muted text-center underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+                  className="text-xs text-text-muted text-center underline underline-offset-2 disabled:no-underline disabled:opacity-50 self-center"
                 >
                   {loading
-                    ? 'Отправляем новый код...'
+                    ? 'Отправляем...'
                     : resendCooldown > 0
-                      ? `Запросить новый код через ${formatCooldown(resendCooldown)}`
+                      ? `Повторить через ${formatCooldown(resendCooldown)}`
                       : 'Отправить код повторно'}
                 </button>
-              </div>
+              </>
+            )}
+          </div>
 
-              <Button onClick={handleVerifyCode} disabled={code.length < 4 || loading}>
-                {loading ? 'Проверка...' : 'Подтвердить'}
-              </Button>
-            </>
-          )}
-
-          {/* ── Payment step ── */}
-          {step === 'payment' && (
-            <>
-              <div className="flex flex-col gap-2">
-                {PAYMENT_METHODS.map((method) => (
-                  <button
-                    key={method.id}
-                    onClick={() => setPaymentMethod(method.id)}
-                    className={[
-                      'flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left',
-                      paymentMethod === method.id
-                        ? 'border-brand-orange bg-surface-warm'
-                        : 'border-gray-100 bg-white',
-                    ].join(' ')}
-                  >
-                    <span className="text-xl leading-none">{method.icon}</span>
-                    <span className="text-sm font-medium text-text-primary flex-1">{method.label}</span>
-                    {paymentMethod === method.id && <CheckIcon />}
-                  </button>
-                ))}
-              </div>
-
-              <Button onClick={onConfirm} disabled={submitting}>
-                {submitting ? 'Оформление...' : 'Подтвердить заказ'}
-              </Button>
-              {submitError && <p className="text-xs text-red-500 text-center">{submitError}</p>}
-            </>
-          )}
+          <Button onClick={onConfirm} disabled={!verified || submitting}>
+            {submitting ? 'Оформление...' : 'Подтвердить заказ'}
+          </Button>
+          {submitError && <p className="text-xs text-red-500 text-center">{submitError}</p>}
         </div>
       </div>
     </div>
