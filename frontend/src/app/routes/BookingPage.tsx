@@ -1104,7 +1104,11 @@ export function BookingPage() {
   }
 
   async function handleArrivedAtPickup() {
-    if (!activeOrder || !pointA || !pointB || simPhase !== 'waitingAtPickup') return
+    if (!activeOrder || !pointA || simPhase !== 'waitingAtPickup') return
+
+    const destinationLng = pointB?.lng ?? activeOrder.destination_lng
+    const destinationLat = pointB?.lat ?? activeOrder.destination_lat
+    if (destinationLng == null || destinationLat == null) return
 
     const runId = ++simulationRunIdRef.current
     clearSimulationTimers()
@@ -1114,7 +1118,7 @@ export function BookingPage() {
     setAssignedDriver(driver)
 
     const tripStart: LngLat = activeCarSimulation?.coordinate ?? [pointA.lng, pointA.lat]
-    const destination: LngLat = [pointB.lng, pointB.lat]
+    const destination: LngLat = [destinationLng, destinationLat]
 
     let coordinates: LngLat[] = [tripStart, destination]
     let distance = 0
@@ -1290,7 +1294,7 @@ export function BookingPage() {
               /* Completed summary — shown in-place after trip ends */
               <div className="transition-all duration-300 ease-out" style={{ opacity: 1 }}>
                 <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-                  Самое важное
+                  Главное
                 </p>
                 <div className="px-4 pb-4">
                   <CompletedSlide
@@ -1312,7 +1316,7 @@ export function BookingPage() {
                 }}
               >
                 <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-                  Самое важное
+                  Главное
                 </p>
                 <div className="px-4 pb-4">
                   <TripSlide
@@ -1332,6 +1336,9 @@ export function BookingPage() {
             ) : (
               /* Booking form */
               <div>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
+                  Главное
+                </p>
                 <div className="px-4 pt-0 pb-1">
                   <PointRow
                     label="А"
@@ -1445,10 +1452,11 @@ export function BookingPage() {
           {/* ── Slide 1: weather & surcharge (inactive appearance during active trip) ── */}
           <div className="flex-shrink-0 w-full" style={{ scrollSnapAlign: 'start' }}>
             <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-              Самое важное
+              Важное
             </p>
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-4 flex flex-col gap-3">
               <WeatherSlide inactive={hasActiveTrip} />
+              <BonusGameBanner />
             </div>
           </div>
         </div>
@@ -1822,6 +1830,68 @@ function CompletedSlide({
         <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
           <span className="text-white text-xs font-bold">A</span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function BonusGameBanner() {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden relative"
+      style={{ background: 'linear-gradient(135deg, #FC6500 0%, #FF9533 60%, #FFB84D 100%)' }}
+    >
+      {/* Decorative % in background */}
+      <span
+        className="absolute -top-3 left-3 text-[80px] font-black leading-none select-none pointer-events-none"
+        style={{ color: 'rgba(255,255,255,0.12)' }}
+      >
+        %
+      </span>
+
+      {/* Car SVG — side view, rotated diagonally */}
+      <div className="absolute right-0 bottom-0 -rotate-12 translate-x-3 translate-y-2 pointer-events-none">
+        <svg width="110" height="64" viewBox="0 0 110 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Body */}
+          <rect x="6" y="30" width="98" height="20" rx="7" fill="white" fillOpacity="0.92" />
+          {/* Cabin roof */}
+          <path d="M24 30 C26 20 33 13 42 12 L68 12 C77 12 84 19 86 30Z" fill="white" fillOpacity="0.92" />
+          {/* Windshield + rear window */}
+          <path d="M28 28 C30 21 35 16 42 15 L52 15 L52 28Z" fill="#FC6500" fillOpacity="0.55" />
+          <path d="M58 15 L68 15 C75 16 80 21 82 28 L58 28Z" fill="#FC6500" fillOpacity="0.55" />
+          {/* Door split */}
+          <line x1="55" y1="30" x2="55" y2="50" stroke="white" strokeOpacity="0.35" strokeWidth="1" />
+          {/* Rear wheel arch */}
+          <path d="M6 44 Q6 50 14 50" stroke="white" strokeOpacity="0.5" strokeWidth="1.5" fill="none" />
+          {/* Front bumper line */}
+          <path d="M104 38 Q107 42 104 50" stroke="white" strokeOpacity="0.5" strokeWidth="1.5" fill="none" />
+          {/* Left wheel */}
+          <circle cx="26" cy="50" r="11" fill="#E05600" />
+          <circle cx="26" cy="50" r="7" fill="#C04800" />
+          <circle cx="26" cy="50" r="3.5" fill="white" fillOpacity="0.7" />
+          {/* Right wheel */}
+          <circle cx="84" cy="50" r="11" fill="#E05600" />
+          <circle cx="84" cy="50" r="7" fill="#C04800" />
+          <circle cx="84" cy="50" r="3.5" fill="white" fillOpacity="0.7" />
+          {/* Headlight */}
+          <rect x="100" y="34" width="5" height="7" rx="2" fill="white" fillOpacity="0.8" />
+          {/* Tail light */}
+          <rect x="5" y="34" width="4" height="7" rx="2" fill="white" fillOpacity="0.5" />
+        </svg>
+      </div>
+
+      {/* Content */}
+      <div className="relative z-10 px-5 py-4 pr-28">
+        <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mb-1">Бонусная программа</p>
+        <p className="text-[15px] font-bold text-white leading-snug">
+          Играй, чтобы<br />получить бонусы
+        </p>
+        <button
+          type="button"
+          className="mt-3 bg-white text-brand-orange text-xs font-bold px-4 py-1.5 rounded-full shadow-sm active:scale-95 transition-transform"
+        >
+          Играть →
+        </button>
       </div>
     </div>
   )
