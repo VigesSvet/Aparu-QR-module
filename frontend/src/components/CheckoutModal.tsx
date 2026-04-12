@@ -121,6 +121,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   }
 
   function resetPhone() {
+    setPhone('')
     setPhoneState('input')
     setCode('')
     setCodeError('')
