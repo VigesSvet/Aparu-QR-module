@@ -63,7 +63,7 @@ type SimPhase =
 
 interface TariffDriverPreset {
   tariffMatch: string
-  driverName: string
+  driverName: Record<Language, string>
   carModel: string
   plate: string
   avatarText: string
@@ -78,10 +78,10 @@ interface ActiveCarSimulation {
 }
 
 const DRIVER_PRESETS: TariffDriverPreset[] = [
-  { tariffMatch: 'эконом', driverName: 'Тимур Н.', carModel: 'Chevrolet Cobalt', plate: '707 ANA 18', avatarText: 'АН', avatarBg: '#FC6500', carColor: '#FC6500' },
-  { tariffMatch: 'оптимал', driverName: 'Руслан К.', carModel: 'Hyundai Elantra', plate: '525 KZT 18', avatarText: 'РК', avatarBg: '#FF8C42', carColor: '#FF8C42' },
-  { tariffMatch: 'комфорт', driverName: 'Диас С.', carModel: 'Kia K5', plate: '313 KFM 18', avatarText: 'ДС', avatarBg: '#1F7A8C', carColor: '#1F7A8C' },
-  { tariffMatch: 'бизнес', driverName: 'Айдос С.', carModel: 'Toyota Camry 70', plate: '777 VIP 16', avatarText: 'АС', avatarBg: '#2A3037', carColor: '#2A3037' },
+  { tariffMatch: 'эконом', driverName: { ru: 'Тимур Н.', kk: 'Тимур Н.', en: 'Timur N.' }, carModel: 'Chevrolet Cobalt', plate: '707 ANA 18', avatarText: 'АН', avatarBg: '#FC6500', carColor: '#FC6500' },
+  { tariffMatch: 'оптимал', driverName: { ru: 'Руслан К.', kk: 'Руслан Қ.', en: 'Ruslan K.' }, carModel: 'Hyundai Elantra', plate: '525 KZT 18', avatarText: 'РК', avatarBg: '#FF8C42', carColor: '#FF8C42' },
+  { tariffMatch: 'комфорт', driverName: { ru: 'Диас С.', kk: 'Диас С.', en: 'Dias S.' }, carModel: 'Kia K5', plate: '313 KFM 18', avatarText: 'ДС', avatarBg: '#1F7A8C', carColor: '#1F7A8C' },
+  { tariffMatch: 'бизнес', driverName: { ru: 'Айдос С.', kk: 'Айдос С.', en: 'Aidos S.' }, carModel: 'Toyota Camry 70', plate: '777 VIP 16', avatarText: 'АС', avatarBg: '#2A3037', carColor: '#2A3037' },
 ]
 
 const SIM_TIMINGS = {
@@ -101,39 +101,278 @@ interface Point {
 
 type ActiveField = 'A' | 'B'
 type RouteInfo = { distance: number; time: number }
+type Language = 'ru' | 'kk' | 'en'
 
 interface CompletedSummary {
   price: number
   waitSeconds: number
   tripSeconds: number | null
 }
-const TARIFF_ORDER = ['Эконом', 'Оптимал', 'Комфорт', 'Бизнес']
-
-const STATUS_STEPS: { key: string; label: string }[] = [
-  { key: 'searching', label: 'Поиск' },
-  { key: 'assigned', label: 'Назначен' },
-  { key: 'driving', label: 'Едет' },
-  { key: 'arrived', label: 'Прибыл' },
+const LANGUAGE_STORAGE_KEY = 'aparu_booking_language'
+const LANGUAGE_LOCALES: Record<Language, string> = {
+  ru: 'ru-RU',
+  kk: 'kk-KZ',
+  en: 'en-US',
+}
+const LANGUAGE_OPTIONS: Array<{ value: Language; label: string }> = [
+  { value: 'ru', label: 'RU' },
+  { value: 'kk', label: 'KZ' },
+  { value: 'en', label: 'EN' },
 ]
 
-const STATUS_MESSAGES: Record<string, string> = {
-  searching: 'Ищем машину...',
-  assigned: 'Заказ подтверждён',
-  driving: 'Машина едет к вам',
-  arrived: 'Машина ожидает у точки посадки',
-}
-
-
-
-const SIM_PHASE_MESSAGES: Record<SimPhase, string> = {
-  idle: '',
-  searchingModal: 'Ищем таксиста...',
-  assignedPreview: 'Таксист назначен',
-  approachingPickup: 'Таксист едет к вам',
-  waitingAtPickup: 'Таксист прибыл',
-  inTrip: 'Поездка началась',
-  completed: 'Поездка завершена',
-}
+const TRANSLATIONS = {
+  ru: {
+    statusSearchingStep: 'Поиск',
+    statusAssignedStep: 'Назначен',
+    statusDrivingStep: 'Едет',
+    statusArrivedStep: 'Прибыл',
+    statusSearching: 'Ищем машину...',
+    statusAssigned: 'Заказ подтверждён',
+    statusDriving: 'Машина едет к вам',
+    statusArrived: 'Машина ожидает у точки посадки',
+    simSearching: 'Ищем таксиста...',
+    simAssigned: 'Таксист назначен',
+    simApproaching: 'Таксист едет к вам',
+    simWaiting: 'Таксист прибыл',
+    simInTrip: 'Поездка началась',
+    simCompleted: 'Поездка завершена',
+    notifAssignedTitle: 'Водитель назначен',
+    notifAssignedBody: 'Заказ подтверждён, водитель принял заказ',
+    notifDrivingTitle: 'Водитель едет к вам',
+    notifDrivingBody: 'Машина уже в пути к точке посадки',
+    notifArrivedTitle: 'Машина прибыла',
+    notifArrivedBody: 'Водитель ожидает вас у точки посадки',
+    notifCancelledTitle: 'Заказ отменён',
+    notifCancelledBody: 'Ваш заказ был отменён',
+    tariffPeriodNight: 'Ночной',
+    tariffPeriodDay: 'Дневной',
+    taximeterFirstKm: 'Первые {{value}} км — {{price}}',
+    taximeterBoarding: 'Посадка — {{price}}',
+    taximeterThen: 'Затем — {{price}} за км',
+    taximeterPerKm: 'Цена за км — {{price}} за км',
+    taximeterAfterTime: 'После {{value}} мин пути — {{price}}/мин',
+    minutesShort: 'мин',
+    secondsShort: 'сек',
+    kmShort: 'км',
+    back: 'Назад',
+    language: 'Язык',
+    moveMapPointA: 'Переместите карту, чтобы изменить точку А',
+    moveMapPointBNew: 'Переместите карту, чтобы выбрать точку Б',
+    moveMapPointBEdit: 'Переместите карту, чтобы изменить точку Б',
+    important: 'Самое важное',
+    fromWhere: 'Откуда едем?',
+    toWhere: 'Куда едем?',
+    tariff: 'Тариф',
+    openTariffTerms: 'Открыть условия тарифа',
+    day: 'День',
+    night: 'Ночь',
+    noTariffs: 'Нет тарифов для выбранного периода',
+    routeCalculating: 'Считаем маршрут...',
+    chooseDestination: 'Выберите точку назначения',
+    ordering: 'Оформление...',
+    orderTaxi: 'Заказать такси',
+    searchingTitle: 'Поиск',
+    searchingNearYou: 'Ищем таксиста рядом с вами',
+    searchingHelp: 'Подбираем ближайшую машину и назначаем водителя',
+    cancel: 'Отмена',
+    searchError: 'Ошибка поиска, попробуйте ещё раз',
+    nothingFound: 'Ничего не найдено',
+    chooseOnMap: 'Или выберите на карте',
+    setPointOnMap: 'Указать точку на карте',
+    orderLabel: 'Заказ #{{id}}',
+    waitingClient: 'Ожидание клиента',
+    iAmHere: 'Я на месте',
+    cancelOrder: 'Отменить заказ',
+    rateService: 'Оцените сервис',
+    starLabel: '{{value}} звезда',
+    appDownload: 'Скачайте приложение',
+    appDownloadSubtitle: 'Удобнее и быстрее заказывать такси',
+    tripCompleted: 'Поездка завершена',
+    thanksAparu: 'Спасибо, что воспользовались APARU',
+    waitingDriver: 'Ожидание водителя',
+    timeOnRoad: 'Время в пути',
+    totalPrice: 'Итоговая стоимость',
+    repeatOrder: 'Повторить заказ',
+    weather: 'Погода',
+    surcharge: 'Наценка',
+    tariffModalTitle: 'Тариф',
+    tariffModalPeriod: 'Тариф: {{value}}',
+    tariffModalByMeter: 'Расчёт по таксометру:',
+    tariffModalWaiting: 'Ожидание клиента:',
+    tariffModalFreeWait: 'Первые {{value}} мин ожидания — бесплатно',
+    tariffModalPaidWait: 'Далее: 1 мин — {{price}}',
+    close: 'Закрыть',
+    orderCreateError: 'Ошибка создания заказа',
+  },
+  kk: {
+    statusSearchingStep: 'Іздеу',
+    statusAssignedStep: 'Тағайындалды',
+    statusDrivingStep: 'Келіп жатыр',
+    statusArrivedStep: 'Келді',
+    statusSearching: 'Көлік іздеп жатырмыз...',
+    statusAssigned: 'Тапсырыс расталды',
+    statusDriving: 'Көлік сізге келе жатыр',
+    statusArrived: 'Көлік алу нүктесінде күтіп тұр',
+    simSearching: 'Жүргізушіні іздеп жатырмыз...',
+    simAssigned: 'Жүргізуші тағайындалды',
+    simApproaching: 'Жүргізуші сізге келе жатыр',
+    simWaiting: 'Жүргізуші келді',
+    simInTrip: 'Сапар басталды',
+    simCompleted: 'Сапар аяқталды',
+    notifAssignedTitle: 'Жүргізуші тағайындалды',
+    notifAssignedBody: 'Тапсырыс расталды, жүргізуші қабылдады',
+    notifDrivingTitle: 'Жүргізуші сізге келе жатыр',
+    notifDrivingBody: 'Көлік алу нүктесіне жолда',
+    notifArrivedTitle: 'Көлік келді',
+    notifArrivedBody: 'Жүргізуші сізді алу нүктесінде күтіп тұр',
+    notifCancelledTitle: 'Тапсырыс тоқтатылды',
+    notifCancelledBody: 'Сіздің тапсырысыңыз тоқтатылды',
+    tariffPeriodNight: 'Түнгі',
+    tariffPeriodDay: 'Күндізгі',
+    taximeterFirstKm: 'Алғашқы {{value}} км — {{price}}',
+    taximeterBoarding: 'Отырғызу — {{price}}',
+    taximeterThen: 'Одан кейін — км үшін {{price}}',
+    taximeterPerKm: 'Км бағасы — км үшін {{price}}',
+    taximeterAfterTime: '{{value}} мин жүргеннен кейін — {{price}}/мин',
+    minutesShort: 'мин',
+    secondsShort: 'сек',
+    kmShort: 'км',
+    back: 'Артқа',
+    language: 'Тіл',
+    moveMapPointA: 'A нүктесін өзгерту үшін картаны жылжытыңыз',
+    moveMapPointBNew: 'B нүктесін таңдау үшін картаны жылжытыңыз',
+    moveMapPointBEdit: 'B нүктесін өзгерту үшін картаны жылжытыңыз',
+    important: 'Ең маңыздысы',
+    fromWhere: 'Қайдан барамыз?',
+    toWhere: 'Қайда барамыз?',
+    tariff: 'Тариф',
+    openTariffTerms: 'Тариф шарттарын ашу',
+    day: 'Күн',
+    night: 'Түн',
+    noTariffs: 'Таңдалған кезеңге тарифтер жоқ',
+    routeCalculating: 'Маршрут есептеліп жатыр...',
+    chooseDestination: 'Баратын нүктені таңдаңыз',
+    ordering: 'Рәсімделуде...',
+    orderTaxi: 'Такси шақыру',
+    searchingTitle: 'Іздеу',
+    searchingNearYou: 'Жаныңыздан жүргізуші іздеп жатырмыз',
+    searchingHelp: 'Ең жақын көлікті тауып, жүргізушіні тағайындап жатырмыз',
+    cancel: 'Болдырмау',
+    searchError: 'Іздеу қатесі, қайта көріңіз',
+    nothingFound: 'Ештеңе табылмады',
+    chooseOnMap: 'Немесе картадан таңдаңыз',
+    setPointOnMap: 'Картадан нүктені көрсету',
+    orderLabel: 'Тапсырыс #{{id}}',
+    waitingClient: 'Клиентті күту',
+    iAmHere: 'Келіп тұрмын',
+    cancelOrder: 'Тапсырысты тоқтату',
+    rateService: 'Қызметті бағалаңыз',
+    starLabel: '{{value}} жұлдыз',
+    appDownload: 'Қосымшаны жүктеп алыңыз',
+    appDownloadSubtitle: 'Таксиге тапсырыс беру ыңғайлы әрі жылдам',
+    tripCompleted: 'Сапар аяқталды',
+    thanksAparu: 'APARU қызметін таңдағаныңызға рақмет',
+    waitingDriver: 'Жүргізушіні күту',
+    timeOnRoad: 'Жол уақыты',
+    totalPrice: 'Жалпы құны',
+    repeatOrder: 'Тапсырысты қайталау',
+    weather: 'Ауа райы',
+    surcharge: 'Үстеме',
+    tariffModalTitle: 'Тариф',
+    tariffModalPeriod: 'Тариф: {{value}}',
+    tariffModalByMeter: 'Таксометр бойынша есеп:',
+    tariffModalWaiting: 'Клиентті күту:',
+    tariffModalFreeWait: 'Алғашқы {{value}} мин күту — тегін',
+    tariffModalPaidWait: 'Әрі қарай: 1 мин — {{price}}',
+    close: 'Жабу',
+    orderCreateError: 'Тапсырыс құру қатесі',
+  },
+  en: {
+    statusSearchingStep: 'Searching',
+    statusAssignedStep: 'Assigned',
+    statusDrivingStep: 'On the way',
+    statusArrivedStep: 'Arrived',
+    statusSearching: 'Looking for a car...',
+    statusAssigned: 'Ride confirmed',
+    statusDriving: 'Your car is on the way',
+    statusArrived: 'The car is waiting at pickup',
+    simSearching: 'Looking for a driver...',
+    simAssigned: 'Driver assigned',
+    simApproaching: 'Driver is coming',
+    simWaiting: 'Driver arrived',
+    simInTrip: 'Trip started',
+    simCompleted: 'Trip completed',
+    notifAssignedTitle: 'Driver assigned',
+    notifAssignedBody: 'Your order is confirmed and accepted by the driver',
+    notifDrivingTitle: 'Driver is on the way',
+    notifDrivingBody: 'The car is already heading to the pickup point',
+    notifArrivedTitle: 'Car arrived',
+    notifArrivedBody: 'The driver is waiting at the pickup point',
+    notifCancelledTitle: 'Order cancelled',
+    notifCancelledBody: 'Your order has been cancelled',
+    tariffPeriodNight: 'Night',
+    tariffPeriodDay: 'Day',
+    taximeterFirstKm: 'First {{value}} km — {{price}}',
+    taximeterBoarding: 'Pickup — {{price}}',
+    taximeterThen: 'Then — {{price}} per km',
+    taximeterPerKm: 'Price per km — {{price}} per km',
+    taximeterAfterTime: 'After {{value}} min on the road — {{price}}/min',
+    minutesShort: 'min',
+    secondsShort: 'sec',
+    kmShort: 'km',
+    back: 'Back',
+    language: 'Language',
+    moveMapPointA: 'Move the map to change point A',
+    moveMapPointBNew: 'Move the map to choose point B',
+    moveMapPointBEdit: 'Move the map to change point B',
+    important: 'Highlights',
+    fromWhere: 'Where from?',
+    toWhere: 'Where to?',
+    tariff: 'Tariff',
+    openTariffTerms: 'Open tariff details',
+    day: 'Day',
+    night: 'Night',
+    noTariffs: 'No tariffs for the selected period',
+    routeCalculating: 'Calculating route...',
+    chooseDestination: 'Choose a destination',
+    ordering: 'Processing...',
+    orderTaxi: 'Order a taxi',
+    searchingTitle: 'Searching',
+    searchingNearYou: 'Looking for a nearby driver',
+    searchingHelp: 'Matching the nearest car and assigning a driver',
+    cancel: 'Cancel',
+    searchError: 'Search failed, please try again',
+    nothingFound: 'Nothing found',
+    chooseOnMap: 'Or choose on the map',
+    setPointOnMap: 'Set point on the map',
+    orderLabel: 'Order #{{id}}',
+    waitingClient: 'Waiting for passenger',
+    iAmHere: 'I am here',
+    cancelOrder: 'Cancel order',
+    rateService: 'Rate the service',
+    starLabel: '{{value}} star',
+    appDownload: 'Download the app',
+    appDownloadSubtitle: 'Ordering a taxi is faster and easier in the app',
+    tripCompleted: 'Trip completed',
+    thanksAparu: 'Thanks for choosing APARU',
+    waitingDriver: 'Driver waiting time',
+    timeOnRoad: 'Travel time',
+    totalPrice: 'Total price',
+    repeatOrder: 'Repeat order',
+    weather: 'Weather',
+    surcharge: 'Surcharge',
+    tariffModalTitle: 'Tariff',
+    tariffModalPeriod: 'Tariff: {{value}}',
+    tariffModalByMeter: 'Meter calculation:',
+    tariffModalWaiting: 'Passenger waiting:',
+    tariffModalFreeWait: 'First {{value}} min of waiting — free',
+    tariffModalPaidWait: 'Then: 1 min — {{price}}',
+    close: 'Close',
+    orderCreateError: 'Failed to create order',
+  },
+} as const
+type TranslationKey = keyof typeof TRANSLATIONS.ru
+const TARIFF_ORDER = ['Эконом', 'Оптимал', 'Комфорт', 'Бизнес']
 
 const SIM_PHASE_TO_ORDER_STATUS: Record<Exclude<SimPhase, 'idle' | 'completed'>, OrderOut['status']> = {
   searchingModal: 'searching',
@@ -143,13 +382,79 @@ const SIM_PHASE_TO_ORDER_STATUS: Record<Exclude<SimPhase, 'idle' | 'completed'>,
   inTrip: 'in_trip',
 }
 
+function readStoredLanguage(): Language {
+  const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  if (stored === 'ru' || stored === 'kk' || stored === 'en') return stored
+  return 'ru'
+}
+
+function t(language: Language, key: TranslationKey, vars?: Record<string, string | number>) {
+  let text: string = TRANSLATIONS[language][key]
+  if (!vars) return text
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.split(`{{${name}}}`).join(String(value))
+  }
+  return text
+}
+
+function getStatusSteps(language: Language) {
+  return [
+    { key: 'searching', label: t(language, 'statusSearchingStep') },
+    { key: 'assigned', label: t(language, 'statusAssignedStep') },
+    { key: 'driving', label: t(language, 'statusDrivingStep') },
+    { key: 'arrived', label: t(language, 'statusArrivedStep') },
+  ]
+}
+
+function getStatusMessages(language: Language): Record<string, string> {
+  return {
+    searching: t(language, 'statusSearching'),
+    assigned: t(language, 'statusAssigned'),
+    driving: t(language, 'statusDriving'),
+    arrived: t(language, 'statusArrived'),
+  }
+}
+
+function getSimPhaseMessages(language: Language): Record<SimPhase, string> {
+  return {
+    idle: '',
+    searchingModal: t(language, 'simSearching'),
+    assignedPreview: t(language, 'simAssigned'),
+    approachingPickup: t(language, 'simApproaching'),
+    waitingAtPickup: t(language, 'simWaiting'),
+    inTrip: t(language, 'simInTrip'),
+    completed: t(language, 'simCompleted'),
+  }
+}
+
+function getNotificationMessages(language: Language): Record<string, { title: string; body: string }> {
+  return {
+    assigned: {
+      title: t(language, 'notifAssignedTitle'),
+      body: t(language, 'notifAssignedBody'),
+    },
+    driving: {
+      title: t(language, 'notifDrivingTitle'),
+      body: t(language, 'notifDrivingBody'),
+    },
+    arrived: {
+      title: t(language, 'notifArrivedTitle'),
+      body: t(language, 'notifArrivedBody'),
+    },
+    cancelled: {
+      title: t(language, 'notifCancelledTitle'),
+      body: t(language, 'notifCancelledBody'),
+    },
+  }
+}
+
 function getAutoTariffPeriod(now = new Date()): TariffPeriod {
   const hour = now.getHours()
   return hour >= 22 || hour < 6 ? 'night' : 'day'
 }
 
-function formatTariffPeriodLabel(period: TariffPeriod | OrderOut['tariff_period']) {
-  return period === 'night' ? 'Ночной' : 'Дневной'
+function formatTariffPeriodLabel(period: TariffPeriod | OrderOut['tariff_period'], language: Language) {
+  return period === 'night' ? t(language, 'tariffPeriodNight') : t(language, 'tariffPeriodDay')
 }
 
 function getTariffsForPeriod(tariffs: TariffOut[], period: TariffPeriod) {
@@ -181,26 +486,29 @@ function calculateTariffPrice(tariff: TariffOut, routeInfo: RouteInfo | null) {
   )
 }
 
-function formatPrice(value: number, currency = 'тг') {
-  return `${new Intl.NumberFormat('ru-RU').format(Math.round(value))} ${currency}`
+function formatPrice(value: number, currency = 'тг', language: Language = 'ru') {
+  return `${new Intl.NumberFormat(LANGUAGE_LOCALES[language]).format(Math.round(value))} ${currency}`
 }
 
-function formatRouteMeta(routeInfo: RouteInfo) {
+function formatRouteMeta(routeInfo: RouteInfo, language: Language) {
   const minutes = Math.floor(routeInfo.time / 1000 / 60)
   const seconds = Math.round((routeInfo.time / 1000) % 60)
-  return `${(routeInfo.distance / 1000).toFixed(1)} км · ${minutes} мин ${seconds} сек`
+  return `${(routeInfo.distance / 1000).toFixed(1)} ${t(language, 'kmShort')} · ${minutes} ${t(language, 'minutesShort')} ${seconds} ${t(language, 'secondsShort')}`
 }
 
-function getTaximeterLines(tariff: TariffOut) {
+function getTaximeterLines(tariff: TariffOut, language: Language) {
   const firstLine = tariff.included_distance_km > 0
-    ? `Первые ${tariff.included_distance_km} км — ${formatPrice(tariff.base_price, tariff.currency)}`
-    : `Посадка — ${formatPrice(tariff.base_price, tariff.currency)}`
+    ? t(language, 'taximeterFirstKm', { value: tariff.included_distance_km, price: formatPrice(tariff.base_price, tariff.currency, language) })
+    : t(language, 'taximeterBoarding', { price: formatPrice(tariff.base_price, tariff.currency, language) })
 
   const secondLine = tariff.included_distance_km > 0
-    ? `Затем — ${formatPrice(tariff.price_per_km, tariff.currency)} за км`
-    : `Цена за км — ${formatPrice(tariff.price_per_km, tariff.currency)} за км`
+    ? t(language, 'taximeterThen', { price: formatPrice(tariff.price_per_km, tariff.currency, language) })
+    : t(language, 'taximeterPerKm', { price: formatPrice(tariff.price_per_km, tariff.currency, language) })
 
-  const thirdLine = `После ${tariff.time_threshold_minutes} мин пути — ${formatPrice(tariff.price_per_minute, tariff.currency)}/мин`
+  const thirdLine = t(language, 'taximeterAfterTime', {
+    value: tariff.time_threshold_minutes,
+    price: formatPrice(tariff.price_per_minute, tariff.currency, language),
+  })
 
   return [firstLine, secondLine, thirdLine]
 }
@@ -239,6 +547,49 @@ function updateCarElementRotation(_marker: maplibregl.Marker | null, _rotation: 
 function resolveDriverPreset(tariffName?: string | null) {
   const normalized = (tariffName ?? '').toLowerCase()
   return DRIVER_PRESETS.find((preset) => normalized.includes(preset.tariffMatch)) ?? DRIVER_PRESETS[0]
+}
+
+function localizeTariffName(name: string | null | undefined, language: Language) {
+  if (!name) return '—'
+  const normalized = name.toLowerCase()
+  if (normalized.includes('эконом')) return { ru: 'Эконом', kk: 'Эконом', en: 'Economy' }[language]
+  if (normalized.includes('оптимал')) return { ru: 'Оптимал', kk: 'Оптимал', en: 'Optimal' }[language]
+  if (normalized.includes('комфорт')) return { ru: 'Комфорт', kk: 'Комфорт', en: 'Comfort' }[language]
+  if (normalized.includes('бизнес')) return { ru: 'Бизнес', kk: 'Бизнес', en: 'Business' }[language]
+  return name
+}
+
+function localizeAddress(value: string | null | undefined, language: Language) {
+  if (!value) return '—'
+  if (language === 'ru') return value
+
+  let result = value
+
+  const replacements: Array<[RegExp, string]> = language === 'kk'
+    ? [
+      [/\bУсть-Каменогорск\b/gi, 'Өскемен'],
+      [/\bулица\b/gi, 'көше'],
+      [/\bул\.\b/gi, 'көш.'],
+      [/\bпроспект\b/gi, 'даңғылы'],
+      [/\bпр\.\b/gi, 'даңғ.'],
+      [/\bплощадь\b/gi, 'алаң'],
+      [/\bмикрорайон\b/gi, 'ықшамаудан'],
+    ]
+    : [
+      [/\bУсть-Каменогорск\b/gi, 'Ust-Kamenogorsk'],
+      [/\bулица\b/gi, 'Street'],
+      [/\bул\.\b/gi, 'St.'],
+      [/\bпроспект\b/gi, 'Avenue'],
+      [/\bпр\.\b/gi, 'Ave.'],
+      [/\bплощадь\b/gi, 'Square'],
+      [/\bмикрорайон\b/gi, 'District'],
+    ]
+
+  replacements.forEach(([pattern, replacement]) => {
+    result = result.replace(pattern, replacement)
+  })
+
+  return result
 }
 
 function getOrderDestinationPoint(order: OrderOut | null): Point | null {
@@ -340,23 +691,16 @@ const WAITING_STARTED_AT_KEY = 'aparu_waiting_started_at'
 const BOOKING_POINT_A_KEY_PREFIX = 'aparu_booking_point_a'
 const BOOKING_POINT_B_KEY_PREFIX = 'aparu_booking_point_b'
 
-const NOTIFICATION_MESSAGES: Record<string, { title: string; body: string }> = {
-  assigned: { title: 'Водитель назначен', body: 'Заказ подтверждён, водитель принял заказ' },
-  driving: { title: 'Водитель едет к вам', body: 'Машина уже в пути к точке посадки' },
-  arrived: { title: 'Машина прибыла', body: 'Водитель ожидает вас у точки посадки' },
-  cancelled: { title: 'Заказ отменён', body: 'Ваш заказ был отменён' },
-}
-
 function requestNotificationPermission() {
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission()
   }
 }
 
-function showStatusNotification(status: string) {
+function showStatusNotification(status: string, language: Language) {
   if (!('Notification' in window)) return
   if (Notification.permission !== 'granted') return
-  const msg = NOTIFICATION_MESSAGES[status]
+  const msg = getNotificationMessages(language)[status]
   if (!msg) return
   new Notification(msg.title, { body: msg.body, icon: '/favicon.ico' })
 }
@@ -432,6 +776,7 @@ export function BookingPage() {
   const markerBRef = useRef<maplibregl.Marker | null>(null)
   const decorativeMarkersRef = useRef<maplibregl.Marker[]>([])
   const activeCarMarkerRef = useRef<maplibregl.Marker | null>(null)
+  const languageMenuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchSeqRef = useRef(0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -453,6 +798,8 @@ export function BookingPage() {
 
   const [mapDragging, setMapDragging] = useState(false)
   const [mapReady, setMapReady] = useState(false)
+  const [language, setLanguage] = useState<Language>(() => readStoredLanguage())
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
   // displayField drives the floating marker visuals and lags behind activeField during pan
   const [displayField, setDisplayField] = useState<ActiveField>('B')
   // true while the camera is flying between fields — hides floating marker, keeps both static
@@ -491,6 +838,7 @@ export function BookingPage() {
   const [tripAnimated, setTripAnimated] = useState(false)
   const [ratingValue, setRatingValue] = useState(0)
   const [completedSummary, setCompletedSummary] = useState<CompletedSummary | null>(null)
+  const simPhaseMessages = getSimPhaseMessages(language)
 
   function clearSimulationTimers() {
     simulationTimersRef.current.forEach((timer) => clearTimeout(timer))
@@ -723,7 +1071,7 @@ export function BookingPage() {
     } else {
       setTripAnimated(false)
     }
-  }, [activeOrderId])
+  }, [activeOrderId, language])
 
   // Poll active order status
   useEffect(() => {
@@ -741,7 +1089,7 @@ export function BookingPage() {
         const order = await orders.get(activeOrderId!)
         const prevStatus = prevOrderStatusRef.current
         if (prevStatus !== null && prevStatus !== order.status) {
-          showStatusNotification(order.status)
+          showStatusNotification(order.status, language)
         }
         prevOrderStatusRef.current = order.status
 
@@ -770,7 +1118,7 @@ export function BookingPage() {
           arrivedAtRef.current = null
           persistWaitingStartedAt(null)
         } else if (order.status === 'cancelled') {
-          showStatusNotification('cancelled')
+          showStatusNotification('cancelled', language)
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
           setActiveOrder(null)
@@ -914,6 +1262,19 @@ export function BookingPage() {
   // Sync state → refs so pan/marker effects can read current values without stale closures
   useEffect(() => { pointARef.current = pointA }, [pointA])
   useEffect(() => { pointBRef.current = pointB }, [pointB])
+  useEffect(() => { localStorage.setItem(LANGUAGE_STORAGE_KEY, language) }, [language])
+  useEffect(() => {
+    if (!languageMenuOpen) return
+
+    function handleClickOutside(event: MouseEvent) {
+      if (!languageMenuRef.current?.contains(event.target as Node)) {
+        setLanguageMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [languageMenuOpen])
   useEffect(() => { persistPoint(pointAStorageKey, pointA) }, [pointA, pointAStorageKey])
   useEffect(() => { persistPoint(pointBStorageKey, pointB) }, [pointB, pointBStorageKey])
   useEffect(() => { hasActiveOrderRef.current = !!activeOrderId }, [activeOrderId])
@@ -1309,10 +1670,32 @@ export function BookingPage() {
     searchSeqRef.current += 1
   }
 
+  function focusSelectedPoint(field: ActiveField, point: Point) {
+    const map = mapRef.current
+
+    if (fieldTransitionTimerRef.current) {
+      clearTimeout(fieldTransitionTimerRef.current)
+      fieldTransitionTimerRef.current = null
+    }
+
+    setActiveField(field)
+    setDisplayField(field)
+    setIsFieldTransitioning(false)
+
+    if (!map) return
+
+    isProgrammaticMoveRef.current = true
+    map.easeTo({
+      center: [point.lng, point.lat],
+      duration: 350,
+    })
+  }
+
   function selectSuggestion(item: GeocodeResultItem) {
     const point = { address: item.address, lat: item.latitude, lng: item.longitude }
     if (searchField === 'A') setPointA(point)
     else setPointB(point)
+    focusSelectedPoint(searchField, point)
     closeSearch()
   }
 
@@ -1370,7 +1753,7 @@ export function BookingPage() {
       setPanelPage(0)
       if (panelScrollRef.current) panelScrollRef.current.scrollLeft = 0
     } catch (error: any) {
-      setSubmitError(error.message ?? 'Ошибка создания заказа')
+      setSubmitError(error.message ?? t(language, 'orderCreateError'))
     } finally {
       setSubmitting(false)
     }
@@ -1475,17 +1858,15 @@ export function BookingPage() {
             <div className="w-full max-w-sm rounded-[28px] bg-white shadow-2xl px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[22px] font-bold text-text-primary">Поиск</p>
-                  <p className="text-sm text-text-muted mt-1">Ищем таксиста рядом с вами</p>
+                  <p className="text-[22px] font-bold text-text-primary">{t(language, 'searchingTitle')}</p>
+                  <p className="text-sm text-text-muted mt-1">{t(language, 'searchingNearYou')}</p>
                 </div>
                 <div className="w-12 h-12 rounded-full border-[3px] border-brand-orange/20 border-t-brand-orange animate-spin" />
               </div>
 
               <div className="mt-5 rounded-2xl bg-surface-warm px-4 py-3">
-                <p className="text-sm font-semibold text-text-primary">{SIM_PHASE_MESSAGES.searchingModal}</p>
-                <p className="text-xs text-text-muted mt-1">
-                  Подбираем ближайшую машину и назначаем водителя
-                </p>
+                <p className="text-sm font-semibold text-text-primary">{simPhaseMessages.searchingModal}</p>
+                <p className="text-xs text-text-muted mt-1">{t(language, 'searchingHelp')}</p>
               </div>
             </div>
           </div>
@@ -1496,14 +1877,14 @@ export function BookingPage() {
             <div className="w-full max-w-sm rounded-[28px] bg-white shadow-2xl px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[22px] font-bold text-text-primary">Поиск</p>
-                  <p className="text-sm text-text-muted mt-1">Ищем таксиста рядом с вами</p>
+                  <p className="text-[22px] font-bold text-text-primary">{t(language, 'searchingTitle')}</p>
+                  <p className="text-sm text-text-muted mt-1">{t(language, 'searchingNearYou')}</p>
                 </div>
                 <div className="w-12 h-12 rounded-full border-[3px] border-brand-orange/20 border-t-brand-orange animate-spin" />
               </div>
               <div className="mt-5 rounded-2xl bg-surface-warm px-4 py-3">
-                <p className="text-sm font-semibold text-text-primary">{SIM_PHASE_MESSAGES.searchingModal}</p>
-                <p className="text-xs text-text-muted mt-1">Подбираем ближайшую машину и назначаем водителя</p>
+                <p className="text-sm font-semibold text-text-primary">{simPhaseMessages.searchingModal}</p>
+                <p className="text-xs text-text-muted mt-1">{t(language, 'searchingHelp')}</p>
               </div>
             </div>
           </div>
@@ -1563,14 +1944,52 @@ export function BookingPage() {
           </div>
         )}
 
-        <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow-sm pointer-events-none">
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow-sm">
           <span className="text-sm font-bold text-brand-orange tracking-tight">APARU</span>
+          <div className="h-5 w-px bg-gray-200" />
+          <div ref={languageMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setLanguageMenuOpen((current) => !current)}
+              aria-label={t(language, 'language')}
+              aria-expanded={languageMenuOpen}
+              className="flex h-8 min-w-[58px] items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-semibold text-text-primary shadow-sm transition-colors hover:border-brand-orange"
+            >
+              <span>{LANGUAGE_OPTIONS.find((option) => option.value === language)?.label ?? language.toUpperCase()}</span>
+              <span className={`text-text-muted transition-transform ${languageMenuOpen ? 'rotate-180' : ''}`}>
+                <ChevronDownIcon />
+              </span>
+            </button>
+
+            {languageMenuOpen && (
+              <div className="absolute left-0 top-full mt-2 min-w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setLanguage(option.value)
+                      setLanguageMenuOpen(false)
+                    }}
+                    className={[
+                      'flex w-full items-center px-3 py-2 text-left text-[11px] font-semibold transition-colors',
+                      language === option.value
+                        ? 'bg-brand-orange text-white'
+                        : 'bg-white text-text-primary hover:bg-gray-50',
+                    ].join(' ')}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <button
           onClick={() => navigate(-1)}
           className="absolute top-4 right-4 z-10 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm flex items-center justify-center text-text-muted"
-          aria-label="Назад"
+          aria-label={t(language, 'back')}
         >
           <ChevronLeftIcon />
         </button>
@@ -1578,8 +1997,8 @@ export function BookingPage() {
         {!hasActiveTrip && !completedSummary && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-brand-dark/80 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full whitespace-nowrap pointer-events-none">
             {displayField === 'A'
-              ? 'Переместите карту, чтобы изменить точку А'
-              : (!pointB ? 'Переместите карту, чтобы выбрать точку Б' : 'Переместите карту, чтобы изменить точку Б')}
+              ? t(language, 'moveMapPointA')
+              : (!pointB ? t(language, 'moveMapPointBNew') : t(language, 'moveMapPointBEdit'))}
           </div>
         )}
       </div>
@@ -1602,11 +2021,12 @@ export function BookingPage() {
               /* Completed summary — shown in-place after trip ends */
               <div className="transition-all duration-300 ease-out" style={{ opacity: 1 }}>
                 <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-                  Самое важное
+                  {t(language, 'important')}
                 </p>
                 <div className="px-4 pb-4">
                   <CompletedSlide
                     summary={completedSummary}
+                    language={language}
                     onRepeat={() => {
                       setCompletedSummary(null)
                       navigate(getRepeatScanPath())
@@ -1624,13 +2044,13 @@ export function BookingPage() {
                 }}
               >
                 <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-                  Самое важное
+                  {t(language, 'important')}
                 </p>
                 <div className="px-4 pb-4">
                   <TripSlide
                     order={activeOrder}
-                    pickupAddress={pointA?.address ?? activeOrder.location_name ?? '—'}
-                    destinationAddress={pointB?.address ?? activeOrder.destination_address}
+                    pickupAddress={localizeAddress(pointA?.address ?? activeOrder.location_name ?? '—', language)}
+                    destinationAddress={localizeAddress(pointB?.address ?? activeOrder.destination_address, language)}
                     ratingValue={ratingValue}
                     onRate={setRatingValue}
                     onCancel={handleCancelOrder}
@@ -1638,6 +2058,7 @@ export function BookingPage() {
                     driver={assignedDriver}
                     waitingSeconds={waitingSeconds}
                     onArrivedAtPickup={handleArrivedAtPickup}
+                    language={language}
                   />
                 </div>
               </div>
@@ -1649,8 +2070,8 @@ export function BookingPage() {
                     label="А"
                     labelBg="bg-brand-orange"
                     labelText="text-white"
-                    address={pointA?.address}
-                    placeholder="Откуда едем?"
+                    address={localizeAddress(pointA?.address, language)}
+                    placeholder={t(language, 'fromWhere')}
                     active={activeField === 'A'}
                     onActivate={() => setActiveField('A')}
                     onOpenSearch={() => openSearch('A')}
@@ -1660,8 +2081,8 @@ export function BookingPage() {
                     label="Б"
                     labelBg="bg-white border-2 border-brand-dark"
                     labelText="text-brand-dark"
-                    address={pointB?.address}
-                    placeholder="Куда едем?"
+                    address={localizeAddress(pointB?.address, language)}
+                    placeholder={t(language, 'toWhere')}
                     active={activeField === 'B'}
                     onActivate={() => setActiveField('B')}
                     onOpenSearch={() => openSearch('B')}
@@ -1676,13 +2097,13 @@ export function BookingPage() {
                       className="inline-flex items-center gap-2 text-sm font-medium text-text-primary"
                     >
                       <TariffInfoIcon />
-                      Тариф
+                      {t(language, 'tariff')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTariffInfoOpen(true)}
                       className="w-7 h-7 rounded-full border border-gray-200 text-text-muted flex items-center justify-center"
-                      aria-label="Открыть условия тарифа"
+                      aria-label={t(language, 'openTariffTerms')}
                     >
                       ?
                     </button>
@@ -1699,7 +2120,7 @@ export function BookingPage() {
                               : 'text-text-muted',
                           ].join(' ')}
                         >
-                          {period === 'day' ? 'День' : 'Ночь'}
+                          {period === 'day' ? t(language, 'day') : t(language, 'night')}
                         </button>
                       ))}
                     </div>
@@ -1717,14 +2138,14 @@ export function BookingPage() {
                             : 'border-gray-100 bg-white',
                         ].join(' ')}
                       >
-                        <span className="text-sm font-medium text-text-primary">{item.name}</span>
+                        <span className="text-sm font-medium text-text-primary">{localizeTariffName(item.name, language)}</span>
                         <span className="text-xs text-text-muted mt-0.5">
-                          {formatPrice(calculateTariffPrice(item, routeInfo), item.currency)}
+                          {formatPrice(calculateTariffPrice(item, routeInfo), item.currency, language)}
                         </span>
                       </button>
                     ))}
                     {visibleTariffs.length === 0 && (
-                      <div className="py-2 text-sm text-text-muted">Нет тарифов для выбранного периода</div>
+                      <div className="py-2 text-sm text-text-muted">{t(language, 'noTariffs')}</div>
                     )}
                   </div>
                 </div>
@@ -1732,21 +2153,21 @@ export function BookingPage() {
                 <div className="px-4 pt-2 pb-6 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-3 gap-4">
                     {routeInfo ? (
-                      <span className="text-sm text-text-muted">{formatRouteMeta(routeInfo)}</span>
+                      <span className="text-sm text-text-muted">{formatRouteMeta(routeInfo, language)}</span>
                     ) : (
                       <span className="text-sm text-text-muted">
-                        {pointB ? 'Считаем маршрут...' : 'Выберите точку назначения'}
+                        {pointB ? t(language, 'routeCalculating') : t(language, 'chooseDestination')}
                       </span>
                     )}
                     {tariff && selectedTariffPrice !== null && (
                       <span className="font-semibold text-base text-text-primary whitespace-nowrap">
-                        {formatPrice(selectedTariffPrice, tariff.currency)}
+                        {formatPrice(selectedTariffPrice, tariff.currency, language)}
                       </span>
                     )}
                   </div>
 
                   <Button onClick={handleConfirm} disabled={!pointA || !pointB || submitting}>
-                    {submitting ? 'Оформление...' : 'Заказать такси'}
+                    {submitting ? t(language, 'ordering') : t(language, 'orderTaxi')}
                   </Button>
                   {submitError && <p className="text-xs text-red-500 text-center mt-2">{submitError}</p>}
                 </div>
@@ -1757,10 +2178,10 @@ export function BookingPage() {
           {/* ── Slide 1: weather & surcharge (inactive appearance during active trip) ── */}
           <div className="flex-shrink-0 w-full" style={{ scrollSnapAlign: 'start' }}>
             <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-4 mb-2">
-              Самое важное
+              {t(language, 'important')}
             </p>
             <div className="px-4 pb-4">
-              <WeatherSlide inactive={hasActiveTrip} />
+              <WeatherSlide inactive={hasActiveTrip} language={language} />
             </div>
           </div>
         </div>
@@ -1809,7 +2230,7 @@ export function BookingPage() {
               type="text"
               value={searchInput}
               onChange={(e) => handleSearchInput(e.target.value)}
-              placeholder={searchField === 'A' ? 'Откуда едем?' : 'Куда едем?'}
+              placeholder={searchField === 'A' ? t(language, 'fromWhere') : t(language, 'toWhere')}
               className="flex-1 h-12 text-sm font-medium text-text-primary placeholder:text-text-muted bg-transparent outline-none"
             />
 
@@ -1830,7 +2251,7 @@ export function BookingPage() {
               onClick={closeSearch}
               className="text-sm text-brand-orange font-medium whitespace-nowrap pl-1"
             >
-              Отмена
+              {t(language, 'cancel')}
             </button>
           </div>
 
@@ -1844,26 +2265,26 @@ export function BookingPage() {
                 >
                   <PinIcon />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-text-primary">{item.address}</p>
-                    <p className="text-xs text-text-muted mt-0.5">{item.additionalInfo}</p>
+                    <p className="text-sm font-medium text-text-primary">{localizeAddress(item.address, language)}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{localizeAddress(item.additionalInfo, language)}</p>
                   </div>
                 </button>
               ))
             ) : searchError ? (
-              <p className="text-sm text-red-500 text-center py-8">Ошибка поиска, попробуйте ещё раз</p>
+              <p className="text-sm text-red-500 text-center py-8">{t(language, 'searchError')}</p>
             ) : searchInput.trim().length > 0 ? (
-              <p className="text-sm text-text-muted text-center py-8">Ничего не найдено</p>
+              <p className="text-sm text-text-muted text-center py-8">{t(language, 'nothingFound')}</p>
             ) : (
               <div className="px-4 py-4">
                 <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-                  Или выберите на карте
+                  {t(language, 'chooseOnMap')}
                 </p>
                 <button
                   onClick={closeSearch}
                   className="w-full flex items-center gap-3 py-2 text-sm font-medium text-text-primary"
                 >
                   <MapPinIcon />
-                  Указать точку на карте
+                  {t(language, 'setPointOnMap')}
                 </button>
               </div>
             )}
@@ -1875,6 +2296,7 @@ export function BookingPage() {
         <TariffModal
           tariff={tariff}
           period={selectedPeriod}
+          language={language}
           onClose={() => setTariffInfoOpen(false)}
         />
       )}
@@ -1885,6 +2307,7 @@ export function BookingPage() {
           onConfirm={handleCreateOrder}
           submitting={submitting}
           submitError={submitError}
+          language={language}
         />
       )}
     </div>
@@ -1904,6 +2327,7 @@ function TripSlide({
   onRate,
   onCancel,
   onArrivedAtPickup,
+  language,
 }: {
   order: OrderOut
   simPhase: SimPhase
@@ -1915,7 +2339,11 @@ function TripSlide({
   onRate: (v: number) => void
   onCancel: () => void
   onArrivedAtPickup: () => void
+  language: Language
 }) {
+  const statusSteps = getStatusSteps(language)
+  const statusMessages = getStatusMessages(language)
+  const simPhaseMessages = getSimPhaseMessages(language)
   const progressStatus = simPhase === 'idle'
     ? order.status
     : simPhase === 'searchingModal'
@@ -1925,7 +2353,7 @@ function TripSlide({
         : simPhase === 'approachingPickup' || simPhase === 'inTrip'
           ? 'driving'
           : 'arrived'
-  const currentIdx = STATUS_STEPS.findIndex((s) => s.key === progressStatus)
+  const currentIdx = statusSteps.findIndex((s) => s.key === progressStatus)
   const waitingLabel = `${Math.floor(waitingSeconds / 60).toString().padStart(2, '0')}:${(waitingSeconds % 60).toString().padStart(2, '0')}`
   const canCancel = simPhase === 'searchingModal' || simPhase === 'assignedPreview' || simPhase === 'approachingPickup' || simPhase === 'waitingAtPickup'
   const showDriverCard = !!driver && simPhase !== 'searchingModal'
@@ -1934,16 +2362,16 @@ function TripSlide({
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
       {/* Header */}
       <div className="px-4 pt-3 pb-2">
-        <p className="text-[11px] text-text-muted font-medium">Заказ #{order.id}</p>
+        <p className="text-[11px] text-text-muted font-medium">{t(language, 'orderLabel', { id: order.id })}</p>
         <p className="text-[15px] font-bold text-text-primary leading-tight mt-0.5">
-          {SIM_PHASE_MESSAGES[simPhase] || STATUS_MESSAGES[order.status] || order.status}
+          {simPhaseMessages[simPhase] || statusMessages[order.status] || order.status}
         </p>
       </div>
 
       {/* Progress bar */}
       <div className="px-4 pb-3">
         <div className="flex items-center gap-1.5">
-          {STATUS_STEPS.map((step, idx) => {
+          {statusSteps.map((step, idx) => {
             const done = idx <= currentIdx
             const active = idx === currentIdx
             return (
@@ -1976,13 +2404,13 @@ function TripSlide({
                 <span className="text-sm font-bold text-white">{driver.avatarText}</span>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-text-primary truncate">{driver.driverName}</p>
+                <p className="text-sm font-semibold text-text-primary truncate">{driver.driverName[language]}</p>
                 <p className="text-xs text-text-muted truncate">{driver.carModel}</p>
               </div>
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs font-semibold text-text-primary">{driver.plate}</p>
-              <p className="text-[11px] text-text-muted mt-0.5">{order.tariff_name ?? '—'}</p>
+              <p className="text-[11px] text-text-muted mt-0.5">{localizeTariffName(order.tariff_name, language)}</p>
             </div>
           </div>
         </div>
@@ -2006,15 +2434,15 @@ function TripSlide({
         </div>
         <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
           <span className="text-[11px] text-text-muted">
-            {order.tariff_name ?? '—'} · {formatTariffPeriodLabel(order.tariff_period)}
+            {localizeTariffName(order.tariff_name, language)} · {formatTariffPeriodLabel(order.tariff_period, language)}
           </span>
-          <span className="text-[11px] font-semibold text-text-primary">{order.price} тг</span>
+          <span className="text-[11px] font-semibold text-text-primary">{formatPrice(order.price, 'тг', language)}</span>
         </div>
       </div>
 
       {simPhase === 'waitingAtPickup' && (
         <div className="mx-4 -mt-1 mb-3 rounded-xl border border-gray-100 bg-white px-3 py-2 flex items-center justify-between">
-          <span className="text-[11px] text-text-muted">Ожидание клиента</span>
+          <span className="text-[11px] text-text-muted">{t(language, 'waitingClient')}</span>
           <span className="text-sm font-semibold text-brand-orange">{waitingLabel}</span>
         </div>
       )}
@@ -2026,7 +2454,7 @@ function TripSlide({
             onClick={onArrivedAtPickup}
             className="w-full h-10 rounded-full bg-brand-orange text-white text-sm font-medium"
           >
-            Я на месте
+            {t(language, 'iAmHere')}
           </button>
         </div>
       ) : canCancel ? (
@@ -2035,21 +2463,21 @@ function TripSlide({
             onClick={onCancel}
             className="w-full h-10 rounded-full border-2 border-gray-200 text-text-muted text-sm font-medium"
           >
-            Отменить заказ
+            {t(language, 'cancelOrder')}
           </button>
         </div>
       ) : null}
 
       {/* Rating */}
       <div className="mx-4 mb-3 pt-3 border-t border-gray-100">
-        <p className="text-xs text-text-muted mb-2">Оцените сервис</p>
+        <p className="text-xs text-text-muted mb-2">{t(language, 'rateService')}</p>
         <div className="flex gap-1.5">
           {[1, 2, 3, 4, 5].map((star) => (
             <button
               key={star}
               onClick={() => onRate(star)}
               className="text-xl leading-none"
-              aria-label={`${star} звезда`}
+              aria-label={t(language, 'starLabel', { value: star })}
             >
               <span className={star <= ratingValue ? 'text-brand-orange' : 'text-gray-300'}>★</span>
             </button>
@@ -2060,8 +2488,8 @@ function TripSlide({
       {/* App download */}
       <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
-          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
+          <p className="text-xs font-semibold text-text-primary">{t(language, 'appDownload')}</p>
+          <p className="text-[11px] text-text-muted mt-0.5">{t(language, 'appDownloadSubtitle')}</p>
         </div>
         <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
           <span className="text-white text-xs font-bold">A</span>
@@ -2074,15 +2502,17 @@ function TripSlide({
 function CompletedSlide({
   summary,
   onRepeat,
+  language,
 }: {
   summary: CompletedSummary
   onRepeat: () => void
+  language: Language
 }) {
   function formatSeconds(totalSeconds: number) {
     const m = Math.floor(totalSeconds / 60)
     const s = Math.round(totalSeconds % 60)
-    if (m === 0) return `${s} сек`
-    return `${m} мин ${s} сек`
+    if (m === 0) return `${s} ${t(language, 'secondsShort')}`
+    return `${m} ${t(language, 'minutesShort')} ${s} ${t(language, 'secondsShort')}`
   }
 
   return (
@@ -2093,26 +2523,26 @@ function CompletedSlide({
           ✅
         </div>
         <div>
-          <p className="text-[15px] font-bold text-text-primary leading-tight">Поездка завершена</p>
-          <p className="text-xs text-text-muted mt-0.5">Спасибо, что воспользовались APARU</p>
+          <p className="text-[15px] font-bold text-text-primary leading-tight">{t(language, 'tripCompleted')}</p>
+          <p className="text-xs text-text-muted mt-0.5">{t(language, 'thanksAparu')}</p>
         </div>
       </div>
 
       {/* Trip stats */}
       <div className="mx-4 mb-3 rounded-xl bg-surface-base px-3 py-3 flex flex-col gap-0">
         <div className="flex items-center justify-between py-2">
-          <span className="text-xs text-text-muted">Ожидание водителя</span>
+          <span className="text-xs text-text-muted">{t(language, 'waitingDriver')}</span>
           <span className="text-xs font-semibold text-text-primary">{formatSeconds(summary.waitSeconds)}</span>
         </div>
         {summary.tripSeconds !== null && (
           <div className="flex items-center justify-between py-2 border-t border-gray-100">
-            <span className="text-xs text-text-muted">Время в пути</span>
+            <span className="text-xs text-text-muted">{t(language, 'timeOnRoad')}</span>
             <span className="text-xs font-semibold text-text-primary">{formatSeconds(summary.tripSeconds)}</span>
           </div>
         )}
         <div className="flex items-center justify-between py-2 border-t border-gray-100">
-          <span className="text-xs text-text-muted">Итоговая стоимость</span>
-          <span className="text-sm font-bold text-brand-orange">{formatPrice(summary.price)}</span>
+          <span className="text-xs text-text-muted">{t(language, 'totalPrice')}</span>
+          <span className="text-sm font-bold text-brand-orange">{formatPrice(summary.price, 'тг', language)}</span>
         </div>
       </div>
 
@@ -2122,15 +2552,15 @@ function CompletedSlide({
           onClick={onRepeat}
           className="w-full h-10 rounded-full bg-brand-orange text-white text-sm font-medium"
         >
-          Повторить заказ
+          {t(language, 'repeatOrder')}
         </button>
       </div>
 
       {/* App download */}
       <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
-          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
+          <p className="text-xs font-semibold text-text-primary">{t(language, 'appDownload')}</p>
+          <p className="text-[11px] text-text-muted mt-0.5">{t(language, 'appDownloadSubtitle')}</p>
         </div>
         <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
           <span className="text-white text-xs font-bold">A</span>
@@ -2140,7 +2570,7 @@ function CompletedSlide({
   )
 }
 
-function WeatherSlide({ inactive }: { inactive: boolean }) {
+function WeatherSlide({ inactive, language }: { inactive: boolean; language: Language }) {
   return (
     <div
       className={[
@@ -2153,7 +2583,7 @@ function WeatherSlide({ inactive }: { inactive: boolean }) {
         <WeatherIcon />
         <div>
           <p className="text-xl font-bold text-text-primary leading-none">—°C</p>
-          <p className="text-[11px] text-text-muted mt-0.5">Погода</p>
+          <p className="text-[11px] text-text-muted mt-0.5">{t(language, 'weather')}</p>
         </div>
       </div>
 
@@ -2162,7 +2592,7 @@ function WeatherSlide({ inactive }: { inactive: boolean }) {
       {/* Right: surcharge */}
       <div className="text-right">
         <p className="text-xl font-bold text-text-primary leading-none">+—%</p>
-        <p className="text-[11px] text-text-muted mt-0.5">Наценка</p>
+        <p className="text-[11px] text-text-muted mt-0.5">{t(language, 'surcharge')}</p>
       </div>
     </div>
   )
@@ -2221,24 +2651,26 @@ function TariffModal({
   tariff,
   period,
   onClose,
+  language,
 }: {
   tariff: TariffOut
   period: TariffPeriod
   onClose: () => void
+  language: Language
 }) {
-  const taximeterLines = getTaximeterLines(tariff)
+  const taximeterLines = getTaximeterLines(tariff, language)
 
   return (
     <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px] flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl px-6 pt-8 pb-6">
-        <h2 className="text-center text-[18px] font-bold text-text-primary mb-6">Тариф</h2>
+        <h2 className="text-center text-[18px] font-bold text-text-primary mb-6">{t(language, 'tariffModalTitle')}</h2>
 
         <div className="space-y-6">
           <div>
             <p className="text-[15px] font-semibold text-text-primary mb-2">
-              Тариф: {formatTariffPeriodLabel(period)}
+              {t(language, 'tariffModalPeriod', { value: formatTariffPeriodLabel(period, language) })}
             </p>
-            <p className="text-[16px] font-semibold text-text-primary mb-2">Расчет по таксометру:</p>
+            <p className="text-[16px] font-semibold text-text-primary mb-2">{t(language, 'tariffModalByMeter')}</p>
             <div className="space-y-1.5">
               {taximeterLines.map((line) => (
                 <p key={line} className="text-[15px] leading-6 text-text-primary">
@@ -2249,13 +2681,13 @@ function TariffModal({
           </div>
 
           <div>
-            <p className="text-[16px] font-semibold text-text-primary mb-2">Ожидание клиента:</p>
+            <p className="text-[16px] font-semibold text-text-primary mb-2">{t(language, 'tariffModalWaiting')}</p>
             <div className="space-y-1.5">
               <p className="text-[15px] leading-6 text-text-primary">
-                Первые {tariff.free_waiting_minutes} мин ожидания — бесплатно
+                {t(language, 'tariffModalFreeWait', { value: tariff.free_waiting_minutes })}
               </p>
               <p className="text-[15px] leading-6 text-text-primary">
-                Далее: 1 мин — {formatPrice(tariff.waiting_price_per_minute, tariff.currency)}
+                {t(language, 'tariffModalPaidWait', { price: formatPrice(tariff.waiting_price_per_minute, tariff.currency, language) })}
               </p>
             </div>
           </div>
@@ -2266,7 +2698,7 @@ function TariffModal({
           onClick={onClose}
           className="mt-8 mx-auto flex h-14 min-w-[220px] items-center justify-center rounded-full bg-brand-orange px-8 text-lg font-medium text-white"
         >
-          Закрыть
+          {t(language, 'close')}
         </button>
       </div>
     </div>
@@ -2282,6 +2714,20 @@ function ChevronLeftIcon() {
         d="M11.25 13.5L6.75 9L11.25 4.5"
         stroke="currentColor"
         strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M3.5 5.25 7 8.75l3.5-3.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
