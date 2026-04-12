@@ -6,8 +6,10 @@ import type { OrderOut, LocationOut, TariffOut, TariffPeriod } from '@/lib/servi
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import QRCode from 'qrcode'
+import { AdminStoriesPanel } from './AdminStoriesPanel'
+import { getQRBaseUrl, setQRBaseUrl } from '@/lib/qrDomain'
 
-type Tab = 'dashboard' | 'orders' | 'locations' | 'tariffs'
+type Tab = 'dashboard' | 'orders' | 'locations' | 'tariffs' | 'stories'
 
 // ─────────────────────────────────────────────
 // Root layout
@@ -54,6 +56,12 @@ export function AdminDesktopLayout() {
             icon={<IconTariffs />}
             label="Тарифы"
           />
+          <NavItem
+            active={activeTab === 'stories'}
+            onClick={() => setActiveTab('stories')}
+            icon={<IconStories />}
+            label="Сторисы"
+          />
         </nav>
 
         <div className="p-4 border-t border-gray-100">
@@ -73,6 +81,7 @@ export function AdminDesktopLayout() {
         {activeTab === 'orders' && <OrdersPanel />}
         {activeTab === 'locations' && <LocationsPanel />}
         {activeTab === 'tariffs' && <TariffsPanel />}
+        {activeTab === 'stories' && <AdminStoriesPanel />}
       </div>
     </div>
   )
@@ -209,6 +218,9 @@ function DashboardPanel({ setActiveTab }: { setActiveTab: (tab: Tab) => void }) 
               <QuickCard icon={<IconTariffs />}   label="Тарифы"    sub={`${tariffList.length} активных`}   onClick={() => setActiveTab('tariffs')} />
             </div>
           </div>
+
+          {/* Row 4: QR domain settings */}
+          <QRDomainSettings />
         </>
       )}
     </div>
@@ -254,6 +266,49 @@ function QuickCard({
         <p className="text-xs text-text-muted mt-0.5">{sub}</p>
       </div>
     </button>
+  )
+}
+
+// ─────────────────────────────────────────────
+// QR Domain Settings
+// ─────────────────────────────────────────────
+
+function QRDomainSettings() {
+  const [value, setValue] = useState(() => getQRBaseUrl())
+  const [saved, setSaved] = useState(false)
+
+  function handleSave() {
+    setQRBaseUrl(value.trim())
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <p className="text-sm font-semibold text-text-primary mb-1">Домен QR-кодов</p>
+      <p className="text-xs text-text-muted mb-4">
+        Все QR-коды будут генерироваться с этим адресом. Можно указать домен, IP с портом, localhost и т.д.
+      </p>
+      <div className="flex items-center gap-3">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setSaved(false) }}
+          placeholder="https://example.com"
+          className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-orange transition-colors font-mono"
+        />
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 text-sm font-medium rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors shrink-0"
+        >
+          {saved ? 'Сохранено ✓' : 'Сохранить'}
+        </button>
+      </div>
+      <p className="text-[11px] text-text-muted mt-2">
+        Пример: <span className="font-mono">https://aparu.kz</span> → QR ведёт на{' '}
+        <span className="font-mono">{value.trim() || getQRBaseUrl()}/scan/1</span>
+      </p>
+    </div>
   )
 }
 
@@ -458,7 +513,7 @@ function OrdersPanel() {
 // ─────────────────────────────────────────────
 
 async function drawQROnCanvas(canvas: HTMLCanvasElement, locationId: number): Promise<void> {
-  const url = `${window.location.origin}/scan/${locationId}`
+  const url = `${getQRBaseUrl()}/scan/${locationId}`
   const qrData = QRCode.create(url, { errorCorrectionLevel: 'H' })
   const moduleCount = qrData.modules.size
   const modules = qrData.modules.data
@@ -1056,6 +1111,16 @@ function IconLogout() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
       <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M10.5 11l3-3-3-3M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function IconStories() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="6" y="1.5" width="6" height="15" rx="2" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="1.5" y="4" width="3" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="13.5" y="4" width="3" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   )
 }

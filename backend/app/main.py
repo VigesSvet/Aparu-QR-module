@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
 from app.routers import maps, auth, locations, tariffs, orders
+from app.routers import stories as stories_router
 
 
 # ── Lifespan ─────────────────────────────────────────────
@@ -59,6 +63,13 @@ app.include_router(maps.router)
 app.include_router(locations.router)
 app.include_router(tariffs.router)
 app.include_router(orders.router)
+app.include_router(stories_router.router)
+
+# ── Static uploads ───────────────────────────────────────
+
+_uploads_dir = Path("uploads")
+_uploads_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 
 # ── Health-check ─────────────────────────────────────────

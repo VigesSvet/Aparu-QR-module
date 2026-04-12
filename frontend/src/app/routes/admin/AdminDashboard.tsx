@@ -5,6 +5,7 @@ import { orders, locations, tariffs } from '@/lib/services/api'
 import type { OrderOut, LocationOut, TariffOut } from '@/lib/services/api'
 import { PageShell } from '@/components/PageShell'
 import { AdminDesktopLayout } from './AdminDesktopLayout'
+import { getQRBaseUrl, setQRBaseUrl } from '@/lib/qrDomain'
 
 export function AdminDashboard() {
   const { user, logout } = useAuth()
@@ -104,12 +105,49 @@ export function AdminDashboard() {
                 <ChevronRightIcon />
               </Link>
             </div>
+
+            <MobileQRDomainSettings />
           </>
         )}
       </main>
     </PageShell>
     </div>
     </>
+  )
+}
+
+function MobileQRDomainSettings() {
+  const [value, setValue] = useState(() => getQRBaseUrl())
+  const [saved, setSaved] = useState(false)
+
+  function handleSave() {
+    setQRBaseUrl(value.trim())
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Домен QR-кодов</p>
+      <div className="rounded-card border border-gray-100 bg-white p-4 shadow-sm flex flex-col gap-3">
+        <p className="text-xs text-text-muted">
+          Адрес для всех QR-кодов. Можно указать домен, IP:порт, localhost и т.д.
+        </p>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setSaved(false) }}
+          placeholder="https://example.com"
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-brand-orange transition-colors font-mono"
+        />
+        <button
+          onClick={handleSave}
+          className="w-full py-2 text-sm font-medium rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors"
+        >
+          {saved ? 'Сохранено ✓' : 'Сохранить'}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -6,6 +6,7 @@ from app.models.location import QRLocation
 from app.models.tariff import Tariff
 from app.models.order import Order
 from app.models.verification_code import VerificationCode
+from app.models.story import Story
 
 __all__ = [
     "Base",
@@ -14,4 +15,5 @@ __all__ = [
     "Tariff",
     "Order",
     "VerificationCode",
+    "Story",
 ]

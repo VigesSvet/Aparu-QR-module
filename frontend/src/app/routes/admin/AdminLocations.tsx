@@ -6,10 +6,11 @@ import type { LocationOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { PageShell } from '@/components/PageShell'
 import QRCode from 'qrcode'
+import { getQRBaseUrl } from '@/lib/qrDomain'
 
 // --- Shared QR drawing logic ---
 async function drawQROnCanvas(canvas: HTMLCanvasElement, locationId: number): Promise<void> {
-  const url = `${window.location.origin}/scan/${locationId}`
+  const url = `${getQRBaseUrl()}/scan/${locationId}`
   const qrData = QRCode.create(url, { errorCorrectionLevel: 'H' })
   const moduleCount = qrData.modules.size
   const modules = qrData.modules.data

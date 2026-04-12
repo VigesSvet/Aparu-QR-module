@@ -8,6 +8,7 @@ import { locations, maps } from '@/lib/services/api'
 import type { LocationOut } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
+import { getQRBaseUrl } from '@/lib/qrDomain'
 
 const DEFAULT_CENTER: [number, number] = [82.6, 49.9]
 const DEFAULT_ZOOM = 12
@@ -136,7 +137,7 @@ export function AdminLocationEditor() {
   // Generate QR on canvas with rounded modules and centered logo
   async function generateQR() {
     if (!savedLocation || !qrCanvasRef.current) return
-    const url = `${window.location.origin}/scan/${savedLocation.id}`
+    const url = `${getQRBaseUrl()}/scan/${savedLocation.id}`
 
     // High error correction — allows logo to cover up to ~30% of QR
     const qrData = QRCode.create(url, { errorCorrectionLevel: 'H' })
@@ -300,7 +301,7 @@ export function AdminLocationEditor() {
     win.document.close()
   }
 
-  const qrUrl = savedLocation ? `${window.location.origin}/scan/${savedLocation.id}` : null
+  const qrUrl = savedLocation ? `${getQRBaseUrl()}/scan/${savedLocation.id}` : null
 
   return (
     <div className="flex flex-col h-screen bg-surface-base overflow-hidden">
