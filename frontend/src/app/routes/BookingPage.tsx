@@ -12,6 +12,7 @@ import type {
 } from '@/lib/services/api'
 import { Button } from '@/components/Button'
 import { CheckoutModal } from '@/components/CheckoutModal'
+import { FlappyCarGame } from '@/components/FlappyCarGame'
 import { getActiveScanLocationId, getRepeatScanPath } from '@/lib/scanContext'
 
 type LngLat = [number, number]
@@ -2134,7 +2135,11 @@ function CompletedSlide({
 }
 
 function BonusGameBanner() {
+  const [showGame, setShowGame] = useState(false)
+
   return (
+    <>
+    {showGame && <FlappyCarGame onClose={() => setShowGame(false)} />}
     <div
       className="rounded-2xl overflow-hidden relative"
       style={{ background: 'linear-gradient(135deg, #FC6500 0%, #FF9533 60%, #FFB84D 100%)' }}
@@ -2186,12 +2191,14 @@ function BonusGameBanner() {
         </p>
         <button
           type="button"
+          onClick={() => setShowGame(true)}
           className="mt-3 bg-white text-brand-orange text-xs font-bold px-4 py-1.5 rounded-full shadow-sm active:scale-95 transition-transform"
         >
           Играть →
         </button>
       </div>
     </div>
+    </>
   )
 }
 
