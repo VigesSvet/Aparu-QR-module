@@ -213,7 +213,7 @@ function getDecorativeCarSvg(color = '#FC6500') {
   `.trim()
 }
 
-function createDecorativeCarElement(rotation: number, color = '#FC6500', size = 24) {
+function createDecorativeCarElement(_rotation: number, color = '#FC6500', size = 24) {
   const shell = document.createElement('div')
   shell.style.width = `${size}px`
   shell.style.height = `${size}px`
@@ -231,7 +231,7 @@ function createDecorativeCarElement(rotation: number, color = '#FC6500', size = 
   return shell
 }
 
-function updateCarElementRotation(marker: maplibregl.Marker | null, rotation: number) {
+function updateCarElementRotation(_marker: maplibregl.Marker | null, _rotation: number) {
   // const visual = marker?.getElement().querySelector('[data-role="car-visual"]') as HTMLDivElement | null
   // if (visual) visual.style.transform = `rotate(${rotation}deg)`
 }
@@ -523,6 +523,50 @@ export function BookingPage() {
     source?.setData(lineFeatureFromCoordinates(coordinates))
   }
 
+  function syncPointMarkers(mapInstance = mapRef.current) {
+    const map = mapInstance
+    if (!map) return
+
+    const isCompletedView = !!completedSummary
+    const hasActiveOrder = !!activeOrderId
+    const showA = isCompletedView
+      ? false
+      : hasActiveOrder
+        ? !!pointA
+        : (isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA))
+    const showB = isCompletedView
+      ? !!pointB
+      : hasActiveOrder
+        ? !!pointB
+        : (isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB))
+
+    if (showA && pointA) {
+      if (markerARef.current) {
+        markerARef.current.setLngLat([pointA.lng, pointA.lat])
+      } else {
+        markerARef.current = new maplibregl.Marker({ color: '#FC6500' })
+          .setLngLat([pointA.lng, pointA.lat])
+          .addTo(map)
+      }
+    } else {
+      markerARef.current?.remove()
+      markerARef.current = null
+    }
+
+    if (showB && pointB) {
+      if (markerBRef.current) {
+        markerBRef.current.setLngLat([pointB.lng, pointB.lat])
+      } else {
+        markerBRef.current = new maplibregl.Marker({ color: '#2A3037' })
+          .setLngLat([pointB.lng, pointB.lat])
+          .addTo(map)
+      }
+    } else {
+      markerBRef.current?.remove()
+      markerBRef.current = null
+    }
+  }
+
   function shouldShowDecorativeCars(order: OrderOut | null, phase: SimPhase, completed: boolean) {
     return !order && phase === 'idle' && !completed
   }
@@ -811,6 +855,8 @@ export function BookingPage() {
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#FC6500', 'line-width': 5, 'line-opacity': 0.95 },
       })
+
+      syncPointMarkers(map)
     })
 
     map.on('movestart', () => {
@@ -884,48 +930,9 @@ export function BookingPage() {
   // - Normally: only the INACTIVE point has a static marker
   // - During field transition: BOTH points have static markers (target visible during flight)
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const isCompletedView = !!completedSummary
-    const hasActiveOrder = !!activeOrderId
-    const showA = isCompletedView
-      ? false
-      : hasActiveOrder
-        ? !!pointA
-        : (isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA))
-    const showB = isCompletedView
-      ? !!pointB
-      : hasActiveOrder
-        ? !!pointB
-        : (isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB))
-
-    if (showA && pointA) {
-      if (markerARef.current) {
-        markerARef.current.setLngLat([pointA.lng, pointA.lat])
-      } else {
-        markerARef.current = new maplibregl.Marker({ color: '#FC6500' })
-          .setLngLat([pointA.lng, pointA.lat])
-          .addTo(map)
-      }
-    } else {
-      markerARef.current?.remove()
-      markerARef.current = null
-    }
-
-    if (showB && pointB) {
-      if (markerBRef.current) {
-        markerBRef.current.setLngLat([pointB.lng, pointB.lat])
-      } else {
-        markerBRef.current = new maplibregl.Marker({ color: '#2A3037' })
-          .setLngLat([pointB.lng, pointB.lat])
-          .addTo(map)
-      }
-    } else {
-      markerBRef.current?.remove()
-      markerBRef.current = null
-    }
-  }, [activeField, pointA, pointB, isFieldTransitioning, activeOrderId, completedSummary])
+    if (!mapReady) return
+    syncPointMarkers()
+  }, [mapReady, activeField, pointA, pointB, isFieldTransitioning, activeOrderId, completedSummary])
 
   // When switching active field:
   //   1. isFieldTransitioning=true → floating marker hides, both static markers visible
@@ -956,7 +963,7 @@ export function BookingPage() {
   useEffect(() => {
     const map = mapRef.current
 
-    if (!map || !pointA || !pointB || activeOrderId || completedSummary) {
+    if (!mapReady || !map || !pointA || !pointB || activeOrderId || completedSummary) {
       setRouteInfo(null)
       const src = map?.getSource('route') as maplibregl.GeoJSONSource | undefined
       src?.setData(emptyFeatureCollection())
@@ -984,7 +991,7 @@ export function BookingPage() {
 
     if (mapLoadedRef.current) apply()
     else map.once('load', apply)
-  }, [pointA, pointB, activeOrderId, completedSummary])
+  }, [mapReady, pointA, pointB, activeOrderId, completedSummary])
 
   useEffect(() => {
     syncRouteSource(APPROACH_ROUTE_SOURCE_ID, approachRouteCoords)
@@ -1040,12 +1047,16 @@ export function BookingPage() {
     let cancelled = false
 
     async function restoreAnimatedState() {
-      const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
-      const statusStartedAtMs = getStatusStartedAtMs(activeOrder) ?? Date.now()
+      const order = activeOrder
+      const pickupPointState = pointA
+      if (!order || !pickupPointState) return
+
+      const driver = assignedDriver ?? resolveDriverPreset(order.tariff_name)
+      const statusStartedAtMs = getStatusStartedAtMs(order) ?? Date.now()
       const elapsedMs = Math.max(Date.now() - statusStartedAtMs, 0)
 
       if (simPhase === 'approachingPickup' && !activeCarMarkerRef.current && approachRouteCoords.length === 0) {
-        const pickupPoint: LngLat = [pointA.lng, pointA.lat]
+        const pickupPoint: LngLat = [pickupPointState.lng, pickupPointState.lat]
         const markerIndex = pickNearestDecorativeCar(pickupPoint)
         const start = DECORATIVE_CAR_COORDINATES[markerIndex]
 
@@ -1098,9 +1109,9 @@ export function BookingPage() {
         )
       }
 
-      const destinationPoint = pointB ?? getOrderDestinationPoint(activeOrder)
+      const destinationPoint = pointB ?? getOrderDestinationPoint(order)
       if (simPhase === 'inTrip' && destinationPoint && !activeCarMarkerRef.current && tripRouteCoords.length === 0) {
-        const tripStart: LngLat = [pointA.lng, pointA.lat]
+        const tripStart: LngLat = [pickupPointState.lng, pickupPointState.lat]
         const destination: LngLat = [destinationPoint.lng, destinationPoint.lat]
 
         let coordinates: LngLat[] = [tripStart, destination]
