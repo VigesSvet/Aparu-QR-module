@@ -14,6 +14,8 @@ import { Button } from '@/components/Button'
 import { CheckoutModal } from '@/components/CheckoutModal'
 import { getActiveScanLocationId, getRepeatScanPath } from '@/lib/scanContext'
 
+type LngLat = [number, number]
+
 const DECORATIVE_CAR_COORDINATES: Array<[number, number]> = [
   [82.603283, 49.902706],
   [82.599506, 49.895408],
@@ -47,6 +49,50 @@ const DECORATIVE_CAR_COORDINATES: Array<[number, number]> = [
   [82.621994, 49.954975],
 ]
 
+const APPROACH_ROUTE_SOURCE_ID = 'approach-route'
+const TRIP_ROUTE_SOURCE_ID = 'trip-route'
+
+type SimPhase =
+  | 'idle'
+  | 'searchingModal'
+  | 'assignedPreview'
+  | 'approachingPickup'
+  | 'waitingAtPickup'
+  | 'inTrip'
+  | 'completed'
+
+interface TariffDriverPreset {
+  tariffMatch: string
+  driverName: string
+  carModel: string
+  plate: string
+  avatarText: string
+  avatarBg: string
+  carColor: string
+}
+
+interface ActiveCarSimulation {
+  markerIndex: number
+  coordinate: LngLat
+  heading: number
+}
+
+const DRIVER_PRESETS: TariffDriverPreset[] = [
+  { tariffMatch: 'эконом', driverName: 'Тимур Н.', carModel: 'Chevrolet Cobalt', plate: '707 ANA 18', avatarText: 'АН', avatarBg: '#FC6500', carColor: '#FC6500' },
+  { tariffMatch: 'оптимал', driverName: 'Руслан К.', carModel: 'Hyundai Elantra', plate: '525 KZT 18', avatarText: 'РК', avatarBg: '#FF8C42', carColor: '#FF8C42' },
+  { tariffMatch: 'комфорт', driverName: 'Диас С.', carModel: 'Kia K5', plate: '313 KFM 18', avatarText: 'ДС', avatarBg: '#1F7A8C', carColor: '#1F7A8C' },
+  { tariffMatch: 'бизнес', driverName: 'Айдос С.', carModel: 'Toyota Camry 70', plate: '777 VIP 16', avatarText: 'АС', avatarBg: '#2A3037', carColor: '#2A3037' },
+]
+
+const SIM_TIMINGS = {
+  searchMs: 2400,
+  assignedPreviewMs: 1400,
+  minApproachMs: 5500,
+  maxApproachMs: 11000,
+  minTripMs: 6500,
+  maxTripMs: 13000,
+}
+
 interface Point {
   address: string
   lat: number
@@ -75,6 +121,26 @@ const STATUS_MESSAGES: Record<string, string> = {
   assigned: 'Заказ подтверждён',
   driving: 'Машина едет к вам',
   arrived: 'Машина ожидает у точки посадки',
+}
+
+
+
+const SIM_PHASE_MESSAGES: Record<SimPhase, string> = {
+  idle: '',
+  searchingModal: 'Ищем таксиста...',
+  assignedPreview: 'Таксист назначен',
+  approachingPickup: 'Таксист едет к вам',
+  waitingAtPickup: 'Таксист прибыл',
+  inTrip: 'Поездка началась',
+  completed: 'Поездка завершена',
+}
+
+const SIM_PHASE_TO_ORDER_STATUS: Record<Exclude<SimPhase, 'idle' | 'completed'>, OrderOut['status']> = {
+  searchingModal: 'searching',
+  assignedPreview: 'assigned',
+  approachingPickup: 'driving',
+  waitingAtPickup: 'arrived',
+  inTrip: 'driving',
 }
 
 function getAutoTariffPeriod(now = new Date()): TariffPeriod {
@@ -110,8 +176,8 @@ function calculateTariffPrice(tariff: TariffOut, routeInfo: RouteInfo | null) {
 
   return Math.round(
     tariff.base_price
-      + extraDistance * tariff.price_per_km
-      + extraDuration * tariff.price_per_minute,
+    + extraDistance * tariff.price_per_km
+    + extraDuration * tariff.price_per_minute,
   )
 }
 
@@ -139,23 +205,84 @@ function getTaximeterLines(tariff: TariffOut) {
   return [firstLine, secondLine, thirdLine]
 }
 
-function getDecorativeCarSvg() {
+function getDecorativeCarSvg(color = '#FC6500') {
   return `
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M21.5651 8.66667H19.2133L18.5878 6.93333C17.9373 5.14667 16.311 4 14.5096 4H9.55583C7.75444 4 6.1532 5.14667 5.47768 6.93333L4.82718 8.66667H2.47537C2.22517 8.66667 2 8.88 2 9.17333C2 9.2 2 9.25333 2.02502 9.28L2.25019 10.2933C2.30023 10.5067 2.50039 10.6667 2.70054 10.6667H3.52618C2.97575 11.1733 2.6505 11.8933 2.6505 12.6667V14.6667C2.6505 15.3067 2.87568 15.92 3.27598 16.4267V18.6667C3.27598 19.4133 3.82641 20 4.52695 20H5.77791C6.47845 20 7.02888 19.4133 7.02888 18.6667V17.3333H17.0366V18.6667C17.0366 19.4133 17.587 20 18.2876 20H19.5385C20.2391 20 20.7895 19.4133 20.7895 18.6667V16.4C21.1898 15.92 21.415 15.3067 21.415 14.64V12.64C21.415 11.8667 21.0897 11.1467 20.5393 10.64H21.3149C21.5401 10.64 21.7152 10.48 21.7652 10.2667L21.9904 9.25333C22.0405 8.98667 21.8903 8.72 21.6401 8.64C21.6401 8.66667 21.6151 8.66667 21.5651 8.66667ZM7.80447 7.92C8.07969 7.14667 8.78023 6.66667 9.55583 6.66667H14.5096C15.2852 6.66667 15.9858 7.17333 16.261 7.92L17.0366 10H7.02888L7.80447 7.92ZM5.77791 14.6667C5.12741 14.72 4.57699 14.1867 4.52695 13.4933C4.52695 13.44 4.52695 13.3867 4.52695 13.3333C4.47691 12.64 4.9773 12.0533 5.6278 12H5.77791C6.52849 12 7.65436 13.2 7.65436 14C7.65436 14.8 6.52849 14.6667 5.77791 14.6667ZM18.2876 14.6667C17.537 14.6667 16.4111 14.8 16.4111 14C16.4111 13.2 17.537 12 18.2876 12C18.9381 11.9467 19.4885 12.48 19.5385 13.1733V13.3333C19.5886 14.0267 19.0882 14.6133 18.4377 14.6667C18.3876 14.6667 18.3376 14.6667 18.2876 14.6667Z" fill="#FC6500"/>
+      <path d="M21.5651 8.66667H19.2133L18.5878 6.93333C17.9373 5.14667 16.311 4 14.5096 4H9.55583C7.75444 4 6.1532 5.14667 5.47768 6.93333L4.82718 8.66667H2.47537C2.22517 8.66667 2 8.88 2 9.17333C2 9.2 2 9.25333 2.02502 9.28L2.25019 10.2933C2.30023 10.5067 2.50039 10.6667 2.70054 10.6667H3.52618C2.97575 11.1733 2.6505 11.8933 2.6505 12.6667V14.6667C2.6505 15.3067 2.87568 15.92 3.27598 16.4267V18.6667C3.27598 19.4133 3.82641 20 4.52695 20H5.77791C6.47845 20 7.02888 19.4133 7.02888 18.6667V17.3333H17.0366V18.6667C17.0366 19.4133 17.587 20 18.2876 20H19.5385C20.2391 20 20.7895 19.4133 20.7895 18.6667V16.4C21.1898 15.92 21.415 15.3067 21.415 14.64V12.64C21.415 11.8667 21.0897 11.1467 20.5393 10.64H21.3149C21.5401 10.64 21.7152 10.48 21.7652 10.2667L21.9904 9.25333C22.0405 8.98667 21.8903 8.72 21.6401 8.64C21.6401 8.66667 21.6151 8.66667 21.5651 8.66667ZM7.80447 7.92C8.07969 7.14667 8.78023 6.66667 9.55583 6.66667H14.5096C15.2852 6.66667 15.9858 7.17333 16.261 7.92L17.0366 10H7.02888L7.80447 7.92ZM5.77791 14.6667C5.12741 14.72 4.57699 14.1867 4.52695 13.4933C4.52695 13.44 4.52695 13.3867 4.52695 13.3333C4.47691 12.64 4.9773 12.0533 5.6278 12H5.77791C6.52849 12 7.65436 13.2 7.65436 14C7.65436 14.8 6.52849 14.6667 5.77791 14.6667ZM18.2876 14.6667C17.537 14.6667 16.4111 14.8 16.4111 14C16.4111 13.2 17.537 12 18.2876 12C18.9381 11.9467 19.4885 12.48 19.5385 13.1733V13.3333C19.5886 14.0267 19.0882 14.6133 18.4377 14.6667C18.3876 14.6667 18.3376 14.6667 18.2876 14.6667Z" fill="${color}"/>
     </svg>
   `.trim()
 }
 
-function createDecorativeCarElement(rotation: number) {
-  const el = document.createElement('div')
-  el.style.width = '24px'
-  el.style.height = '24px'
-  el.style.pointerEvents = 'none'
-  el.style.transform = `rotate(${rotation}deg)`
-  el.style.transformOrigin = 'center'
-  el.innerHTML = getDecorativeCarSvg()
-  return el
+function createDecorativeCarElement(rotation: number, color = '#FC6500', size = 24) {
+  const shell = document.createElement('div')
+  shell.style.width = `${size}px`
+  shell.style.height = `${size}px`
+  shell.style.pointerEvents = 'none'
+
+  const inner = document.createElement('div')
+  inner.dataset.role = 'car-visual'
+  inner.style.width = '100%'
+  inner.style.height = '100%'
+  // inner.style.transform = `rotate(${rotation}deg)` // User requested cars not to rotate
+  inner.style.transformOrigin = 'center'
+  inner.innerHTML = getDecorativeCarSvg(color)
+
+  shell.appendChild(inner)
+  return shell
+}
+
+function updateCarElementRotation(marker: maplibregl.Marker | null, rotation: number) {
+  // const visual = marker?.getElement().querySelector('[data-role="car-visual"]') as HTMLDivElement | null
+  // if (visual) visual.style.transform = `rotate(${rotation}deg)`
+}
+
+function resolveDriverPreset(tariffName?: string | null) {
+  const normalized = (tariffName ?? '').toLowerCase()
+  return DRIVER_PRESETS.find((preset) => normalized.includes(preset.tariffMatch)) ?? DRIVER_PRESETS[0]
+}
+
+function distanceBetweenPoints(a: LngLat, b: LngLat) {
+  const lngScale = Math.cos(((a[1] + b[1]) / 2) * Math.PI / 180)
+  const dx = (a[0] - b[0]) * lngScale
+  const dy = a[1] - b[1]
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function pickNearestDecorativeCar(target: LngLat) {
+  let nearestIndex = 0
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  DECORATIVE_CAR_COORDINATES.forEach((coord, index) => {
+    const distance = distanceBetweenPoints(coord, target)
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearestIndex = index
+    }
+  })
+
+  return nearestIndex
+}
+
+function getHeading(from: LngLat, to: LngLat) {
+  const radians = Math.atan2(to[1] - from[1], to[0] - from[0])
+  return radians * 180 / Math.PI + 90
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function emptyFeatureCollection() {
+  return { type: 'FeatureCollection' as const, features: [] }
+}
+
+function lineFeatureFromCoordinates(coordinates: LngLat[]) {
+  if (coordinates.length < 2) return emptyFeatureCollection()
+  return {
+    type: 'Feature' as const,
+    geometry: { type: 'LineString' as const, coordinates },
+    properties: {},
+  }
 }
 
 const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
@@ -190,6 +317,7 @@ export function BookingPage() {
   const markerARef = useRef<maplibregl.Marker | null>(null)
   const markerBRef = useRef<maplibregl.Marker | null>(null)
   const decorativeMarkersRef = useRef<maplibregl.Marker[]>([])
+  const activeCarMarkerRef = useRef<maplibregl.Marker | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchSeqRef = useRef(0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -202,6 +330,9 @@ export function BookingPage() {
   const prevOrderStatusRef = useRef<string | null>(null)
   const arrivedAtRef = useRef<number | null>(null)
   const routeInfoRef = useRef<RouteInfo | null>(null)
+  const simulationTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const simulationFrameRef = useRef<number | null>(null)
+  const simulationRunIdRef = useRef(0)
 
   const [mapDragging, setMapDragging] = useState(false)
   // displayField drives the floating marker visuals and lags behind activeField during pan
@@ -227,6 +358,12 @@ export function BookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [simPhase, setSimPhase] = useState<SimPhase>('idle')
+  const [assignedDriver, setAssignedDriver] = useState<TariffDriverPreset | null>(null)
+  const [activeCarSimulation, setActiveCarSimulation] = useState<ActiveCarSimulation | null>(null)
+  const [waitingSeconds, setWaitingSeconds] = useState(0)
+  const [approachRouteCoords, setApproachRouteCoords] = useState<LngLat[]>([])
+  const [tripRouteCoords, setTripRouteCoords] = useState<LngLat[]>([])
 
   const [activeOrderId, setActiveOrderId] = useState<number | null>(() => {
     const stored = localStorage.getItem(ACTIVE_ORDER_KEY)
@@ -237,6 +374,159 @@ export function BookingPage() {
   const [tripAnimated, setTripAnimated] = useState(false)
   const [ratingValue, setRatingValue] = useState(0)
   const [completedSummary, setCompletedSummary] = useState<CompletedSummary | null>(null)
+
+  function clearSimulationTimers() {
+    simulationTimersRef.current.forEach((timer) => clearTimeout(timer))
+    simulationTimersRef.current = []
+  }
+
+  function stopSimulationAnimation() {
+    if (simulationFrameRef.current !== null) {
+      cancelAnimationFrame(simulationFrameRef.current)
+      simulationFrameRef.current = null
+    }
+  }
+
+  function invalidateSimulation() {
+    simulationRunIdRef.current += 1
+    clearSimulationTimers()
+    stopSimulationAnimation()
+  }
+
+  function queueSimulationTimer(callback: () => void, delay: number) {
+    const timer = setTimeout(callback, delay)
+    simulationTimersRef.current.push(timer)
+    return timer
+  }
+
+  function syncRouteSource(sourceId: string, coordinates: LngLat[]) {
+    const map = mapRef.current
+    if (!map) return
+    const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined
+    source?.setData(lineFeatureFromCoordinates(coordinates))
+  }
+
+  function hideDecorativeCar(index: number | null, hidden: boolean) {
+    if (index === null) return
+    const marker = decorativeMarkersRef.current[index]
+    if (marker) marker.getElement().style.opacity = hidden ? '0.12' : '1'
+  }
+
+  function removeActiveCarMarker() {
+    activeCarMarkerRef.current?.remove()
+    activeCarMarkerRef.current = null
+    setActiveCarSimulation(null)
+  }
+
+  function ensureActiveCarMarker(coordinate: LngLat, heading: number, color: string) {
+    const map = mapRef.current
+    if (!map) return null
+
+    if (!activeCarMarkerRef.current) {
+      activeCarMarkerRef.current = new maplibregl.Marker({
+        element: createDecorativeCarElement(heading, color, 32),
+        anchor: 'center',
+      })
+        .setLngLat(coordinate)
+        .addTo(map)
+    } else {
+      activeCarMarkerRef.current.setLngLat(coordinate)
+    }
+
+    updateCarElementRotation(activeCarMarkerRef.current, heading)
+    return activeCarMarkerRef.current
+  }
+
+  function fitMapToRoute(coordinates: LngLat[]) {
+    const map = mapRef.current
+    if (!map || coordinates.length < 2) return
+
+    const bounds = coordinates.reduce(
+      (acc, coord) => acc.extend(coord as [number, number]),
+      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+    )
+
+    isProgrammaticMoveRef.current = true
+    map.fitBounds(bounds, {
+      padding: { top: 80, left: 48, right: 48, bottom: 260 },
+      duration: 900,
+    })
+  }
+
+  function updateOrderLocally(status: OrderOut['status']) {
+    setActiveOrder((current) => (current ? { ...current, status } : current))
+  }
+
+  async function syncOrderStatus(status: OrderOut['status']) {
+    if (!activeOrder) return
+    updateOrderLocally(status)
+    try {
+      const updated = await orders.updateStatus(activeOrder.id, status)
+      setActiveOrder(updated)
+    } catch {
+      // ignore backend sync errors during demo simulation
+    }
+  }
+
+  function resetSimulationState() {
+    invalidateSimulation()
+    hideDecorativeCar(activeCarSimulation?.markerIndex ?? null, false)
+    setAssignedDriver(null)
+    setSimPhase('idle')
+    setWaitingSeconds(0)
+    setApproachRouteCoords([])
+    setTripRouteCoords([])
+    syncRouteSource(APPROACH_ROUTE_SOURCE_ID, [])
+    syncRouteSource(TRIP_ROUTE_SOURCE_ID, [])
+    removeActiveCarMarker()
+  }
+
+  function animateMarkerAlongRoute(
+    coordinates: LngLat[],
+    durationMs: number,
+    color: string,
+    markerIndex: number,
+    runId: number,
+    onDone: () => void,
+  ) {
+    if (!coordinates.length) {
+      onDone()
+      return
+    }
+
+    const startedAt = performance.now()
+    hideDecorativeCar(markerIndex, true)
+
+    const step = (now: number) => {
+      if (simulationRunIdRef.current !== runId) return
+
+      const progress = clamp((now - startedAt) / durationMs, 0, 1)
+      const scaledIndex = progress * (coordinates.length - 1)
+      const index = Math.min(Math.floor(scaledIndex), coordinates.length - 2)
+      const nextIndex = Math.min(index + 1, coordinates.length - 1)
+      const localProgress = scaledIndex - index
+      const from = coordinates[index]
+      const to = coordinates[nextIndex]
+      const lng = from[0] + (to[0] - from[0]) * localProgress
+      const lat = from[1] + (to[1] - from[1]) * localProgress
+      const heading = getHeading(from, to)
+      const coordinate: LngLat = [lng, lat]
+
+      ensureActiveCarMarker(coordinate, heading, color)
+      setActiveCarSimulation({ markerIndex, coordinate, heading })
+
+      if (progress >= 1) {
+        simulationFrameRef.current = null
+        onDone()
+        return
+      }
+
+      simulationFrameRef.current = requestAnimationFrame(step)
+    }
+
+    stopSimulationAnimation()
+    simulationFrameRef.current = requestAnimationFrame(step)
+  }
 
   useEffect(() => {
     const locId = getActiveScanLocationId()
@@ -357,7 +647,7 @@ export function BookingPage() {
 
       map.addSource('route', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        data: emptyFeatureCollection(),
       })
       map.addLayer({
         id: 'route',
@@ -365,6 +655,35 @@ export function BookingPage() {
         source: 'route',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#FC6500', 'line-width': 4, 'line-opacity': 0.85 },
+      })
+
+      map.addSource(APPROACH_ROUTE_SOURCE_ID, {
+        type: 'geojson',
+        data: emptyFeatureCollection(),
+      })
+      map.addLayer({
+        id: APPROACH_ROUTE_SOURCE_ID,
+        type: 'line',
+        source: APPROACH_ROUTE_SOURCE_ID,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#2A3037',
+          'line-width': 4,
+          'line-opacity': 0.55,
+          'line-dasharray': [1.5, 1.2],
+        },
+      })
+
+      map.addSource(TRIP_ROUTE_SOURCE_ID, {
+        type: 'geojson',
+        data: emptyFeatureCollection(),
+      })
+      map.addLayer({
+        id: TRIP_ROUTE_SOURCE_ID,
+        type: 'line',
+        source: TRIP_ROUTE_SOURCE_ID,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#FC6500', 'line-width': 5, 'line-opacity': 0.95 },
       })
     })
 
@@ -404,10 +723,12 @@ export function BookingPage() {
     mapRef.current = map
 
     return () => {
+      invalidateSimulation()
       map.remove()
       mapRef.current = null
       mapLoadedRef.current = false
       decorativeMarkersRef.current = []
+      activeCarMarkerRef.current = null
       markerARef.current = null
       markerBRef.current = null
     }
@@ -486,8 +807,10 @@ export function BookingPage() {
   useEffect(() => {
     const map = mapRef.current
 
-    if (!map || !pointA || !pointB) {
+    if (!map || !pointA || !pointB || activeOrderId) {
       setRouteInfo(null)
+      const src = map?.getSource('route') as maplibregl.GeoJSONSource | undefined
+      src?.setData(emptyFeatureCollection())
       return
     }
 
@@ -501,20 +824,114 @@ export function BookingPage() {
         .then((route) => {
           setRouteInfo({ distance: route.distance, time: route.time })
           const src = map.getSource('route') as maplibregl.GeoJSONSource | undefined
-          src?.setData({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: route.coordinates },
-            properties: {},
-          })
+          src?.setData(lineFeatureFromCoordinates(route.coordinates as LngLat[]))
         })
         .catch(() => {
           setRouteInfo(null)
+          const src = map.getSource('route') as maplibregl.GeoJSONSource | undefined
+          src?.setData(emptyFeatureCollection())
         })
     }
 
     if (mapLoadedRef.current) apply()
     else map.once('load', apply)
-  }, [pointA, pointB])
+  }, [pointA, pointB, activeOrderId])
+
+  useEffect(() => {
+    syncRouteSource(APPROACH_ROUTE_SOURCE_ID, approachRouteCoords)
+  }, [approachRouteCoords])
+
+  useEffect(() => {
+    syncRouteSource(TRIP_ROUTE_SOURCE_ID, tripRouteCoords)
+  }, [tripRouteCoords])
+
+  useEffect(() => {
+    if (!activeOrder || simPhase !== 'idle') return
+
+    const preset = resolveDriverPreset(activeOrder.tariff_name)
+    setAssignedDriver(preset)
+
+    if (activeOrder.status === 'searching') {
+      setSimPhase('searchingModal')
+    } else if (activeOrder.status === 'assigned') {
+      setSimPhase('assignedPreview')
+    } else if (activeOrder.status === 'driving') {
+      setSimPhase('approachingPickup')
+    } else if (activeOrder.status === 'arrived') {
+      setSimPhase('waitingAtPickup')
+    }
+  }, [activeOrder, simPhase])
+
+  useEffect(() => {
+    clearSimulationTimers()
+
+    if (!activeOrder) return
+
+    if (simPhase === 'searchingModal') {
+      const runId = simulationRunIdRef.current
+      queueSimulationTimer(async () => {
+        if (simulationRunIdRef.current !== runId) return
+        setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
+        await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.assignedPreview)
+        setSimPhase('assignedPreview')
+      }, SIM_TIMINGS.searchMs)
+    }
+
+    if (simPhase === 'assignedPreview') {
+      queueSimulationTimer(async () => {
+        const runId = ++simulationRunIdRef.current
+        if (!pointA) return
+
+        const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
+        setAssignedDriver(driver)
+
+        const pickupPoint: LngLat = [pointA.lng, pointA.lat]
+        const markerIndex = pickNearestDecorativeCar(pickupPoint)
+        const start = DECORATIVE_CAR_COORDINATES[markerIndex]
+
+        let coordinates: LngLat[] = [start, pickupPoint]
+        let distance = 0
+
+        try {
+          const route = await maps.route([
+            { latitude: start[1], longitude: start[0] },
+            { latitude: pickupPoint[1], longitude: pickupPoint[0] },
+          ])
+          coordinates = route.coordinates as LngLat[]
+          distance = route.distance
+        } catch {
+          // fallback to straight line for demo
+        }
+
+        if (simulationRunIdRef.current !== runId) return
+
+        setApproachRouteCoords(coordinates)
+        setTripRouteCoords([])
+        fitMapToRoute(coordinates)
+        setSimPhase('approachingPickup')
+        await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.approachingPickup)
+
+        const duration = clamp((distance || coordinates.length * 25) * 8, SIM_TIMINGS.minApproachMs, SIM_TIMINGS.maxApproachMs)
+        animateMarkerAlongRoute(coordinates, duration, driver.carColor, markerIndex, runId, async () => {
+          if (simulationRunIdRef.current !== runId) return
+          setWaitingSeconds(0)
+          setApproachRouteCoords([])
+          await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.waitingAtPickup)
+          setSimPhase('waitingAtPickup')
+        })
+      }, SIM_TIMINGS.assignedPreviewMs)
+    }
+
+    return () => {
+      clearSimulationTimers()
+    }
+  }, [simPhase, activeOrder, pointA, assignedDriver])
+
+  useEffect(() => {
+    if (simPhase !== 'waitingAtPickup') return
+    const timer = setInterval(() => setWaitingSeconds((current) => current + 1), 1000)
+    return () => clearInterval(timer)
+  }, [simPhase])
 
   useEffect(() => {
     const periodTariffs = getTariffsForPeriod(tariffList, selectedPeriod)
@@ -632,8 +1049,14 @@ export function BookingPage() {
       localStorage.setItem(ACTIVE_ORDER_KEY, String(order.id))
       prevOrderStatusRef.current = order.status
       requestNotificationPermission()
+      invalidateSimulation()
       setActiveOrderId(order.id)
       setActiveOrder(order)
+      setAssignedDriver(resolveDriverPreset(tariff.name))
+      setWaitingSeconds(0)
+      setApproachRouteCoords([])
+      setTripRouteCoords([])
+      setSimPhase('searchingModal')
       setCheckoutOpen(false)
       // Reset panel to slide 0 (trip slide)
       setPanelPage(0)
@@ -647,6 +1070,7 @@ export function BookingPage() {
 
   async function handleCancelOrder() {
     if (!activeOrder) return
+    resetSimulationState()
     try {
       await orders.updateStatus(activeOrder.id, 'cancelled')
     } catch {
@@ -662,6 +1086,7 @@ export function BookingPage() {
     const waitSeconds = arrivedAtRef.current
       ? (Date.now() - arrivedAtRef.current) / 1000
       : 0
+    resetSimulationState()
     try {
       await orders.updateStatus(activeOrder.id, 'completed')
     } catch {
@@ -678,15 +1103,102 @@ export function BookingPage() {
     arrivedAtRef.current = null
   }
 
-  if (dataLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-8 h-8 border-[3px] border-brand-orange border-t-transparent rounded-full animate-spin" />
-      </div>
+  async function handleArrivedAtPickup() {
+    if (!activeOrder || !pointA || !pointB || simPhase !== 'waitingAtPickup') return
+
+    const runId = ++simulationRunIdRef.current
+    clearSimulationTimers()
+    stopSimulationAnimation()
+
+    const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
+    setAssignedDriver(driver)
+
+    const tripStart: LngLat = activeCarSimulation?.coordinate ?? [pointA.lng, pointA.lat]
+    const destination: LngLat = [pointB.lng, pointB.lat]
+
+    let coordinates: LngLat[] = [tripStart, destination]
+    let distance = 0
+
+    try {
+      const route = await maps.route([
+        { latitude: tripStart[1], longitude: tripStart[0] },
+        { latitude: destination[1], longitude: destination[0] },
+      ])
+      coordinates = route.coordinates as LngLat[]
+      distance = route.distance
+    } catch {
+      // fallback to straight line for demo
+    }
+
+    if (simulationRunIdRef.current !== runId) return
+
+    setApproachRouteCoords([])
+    setTripRouteCoords(coordinates)
+    fitMapToRoute(coordinates)
+    setSimPhase('inTrip')
+    await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.inTrip)
+
+    const duration = clamp((distance || coordinates.length * 30) * 9, SIM_TIMINGS.minTripMs, SIM_TIMINGS.maxTripMs)
+    animateMarkerAlongRoute(
+      coordinates,
+      duration,
+      driver.carColor,
+      activeCarSimulation?.markerIndex ?? pickNearestDecorativeCar(tripStart),
+      runId,
+      () => {
+        handleCompleteOrder()
+      },
     )
   }
 
   const hasActiveTrip = !!activeOrder
+  const searchSimulationOpen = simPhase === 'searchingModal'
+
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="w-8 h-8 border-[3px] border-brand-orange border-t-transparent rounded-full animate-spin" />
+        {searchSimulationOpen && (
+          <div className="absolute inset-0 z-30 bg-black/18 backdrop-blur-[1px] flex items-start justify-center px-4 pt-24">
+            <div className="w-full max-w-sm rounded-[28px] bg-white shadow-2xl px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[22px] font-bold text-text-primary">Поиск</p>
+                  <p className="text-sm text-text-muted mt-1">Ищем таксиста рядом с вами</p>
+                </div>
+                <div className="w-12 h-12 rounded-full border-[3px] border-brand-orange/20 border-t-brand-orange animate-spin" />
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-surface-warm px-4 py-3">
+                <p className="text-sm font-semibold text-text-primary">{SIM_PHASE_MESSAGES.searchingModal}</p>
+                <p className="text-xs text-text-muted mt-1">
+                  Подбираем ближайшую машину и назначаем водителя
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {searchSimulationOpen && (
+          <div className="absolute inset-0 z-30 bg-black/18 backdrop-blur-[1px] flex items-start justify-center px-4 pt-24">
+            <div className="w-full max-w-sm rounded-[28px] bg-white shadow-2xl px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[22px] font-bold text-text-primary">Поиск</p>
+                  <p className="text-sm text-text-muted mt-1">Ищем таксиста рядом с вами</p>
+                </div>
+                <div className="w-12 h-12 rounded-full border-[3px] border-brand-orange/20 border-t-brand-orange animate-spin" />
+              </div>
+              <div className="mt-5 rounded-2xl bg-surface-warm px-4 py-3">
+                <p className="text-sm font-semibold text-text-primary">{SIM_PHASE_MESSAGES.searchingModal}</p>
+                <p className="text-xs text-text-muted mt-1">Подбираем ближайшую машину и назначаем водителя</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
@@ -810,7 +1322,10 @@ export function BookingPage() {
                     ratingValue={ratingValue}
                     onRate={setRatingValue}
                     onCancel={handleCancelOrder}
-                    onComplete={handleCompleteOrder}
+                    simPhase={simPhase}
+                    driver={assignedDriver}
+                    waitingSeconds={waitingSeconds}
+                    onArrivedAtPickup={handleArrivedAtPickup}
                   />
                 </div>
               </div>
@@ -1068,22 +1583,39 @@ export function BookingPage() {
 
 function TripSlide({
   order,
+  simPhase,
+  driver,
   pickupAddress,
   destinationAddress,
+  waitingSeconds,
   ratingValue,
   onRate,
   onCancel,
-  onComplete,
+  onArrivedAtPickup,
 }: {
   order: OrderOut
+  simPhase: SimPhase
+  driver: TariffDriverPreset | null
   pickupAddress: string
   destinationAddress: string
+  waitingSeconds: number
   ratingValue: number
   onRate: (v: number) => void
   onCancel: () => void
-  onComplete: () => void
+  onArrivedAtPickup: () => void
 }) {
-  const currentIdx = STATUS_STEPS.findIndex((s) => s.key === order.status)
+  const progressStatus = simPhase === 'idle'
+    ? order.status
+    : simPhase === 'searchingModal'
+      ? 'searching'
+      : simPhase === 'assignedPreview'
+        ? 'assigned'
+        : simPhase === 'approachingPickup' || simPhase === 'inTrip'
+          ? 'driving'
+          : 'arrived'
+  const currentIdx = STATUS_STEPS.findIndex((s) => s.key === progressStatus)
+  const waitingLabel = `${Math.floor(waitingSeconds / 60).toString().padStart(2, '0')}:${(waitingSeconds % 60).toString().padStart(2, '0')}`
+  const canCancel = simPhase === 'searchingModal' || simPhase === 'assignedPreview' || simPhase === 'approachingPickup' || simPhase === 'waitingAtPickup'
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
@@ -1091,7 +1623,7 @@ function TripSlide({
       <div className="px-4 pt-3 pb-2">
         <p className="text-[11px] text-text-muted font-medium">Заказ #{order.id}</p>
         <p className="text-[15px] font-bold text-text-primary leading-tight mt-0.5">
-          {STATUS_MESSAGES[order.status] ?? order.status}
+          {SIM_PHASE_MESSAGES[simPhase] || STATUS_MESSAGES[order.status] || order.status}
         </p>
       </div>
 
@@ -1123,7 +1655,26 @@ function TripSlide({
         </div>
       </div>
 
-      {/* Route + details */}
+      {driver && (
+        <div className="mx-4 mb-3 rounded-xl border border-gray-100 bg-white px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: driver.avatarBg }}>
+                <span className="text-sm font-bold text-white">{driver.avatarText}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-text-primary truncate">{driver.driverName}</p>
+                <p className="text-xs text-text-muted truncate">{driver.carModel}</p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-semibold text-text-primary">{driver.plate}</p>
+              <p className="text-[11px] text-text-muted mt-0.5">{order.tariff_name ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-4 mb-3 rounded-xl bg-surface-base px-3 py-3">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
@@ -1148,17 +1699,24 @@ function TripSlide({
         </div>
       </div>
 
+      {simPhase === 'waitingAtPickup' && (
+        <div className="mx-4 -mt-1 mb-3 rounded-xl border border-gray-100 bg-white px-3 py-2 flex items-center justify-between">
+          <span className="text-[11px] text-text-muted">Ожидание клиента</span>
+          <span className="text-sm font-semibold text-brand-orange">{waitingLabel}</span>
+        </div>
+      )}
+
       {/* Action button */}
-      {order.status === 'arrived' ? (
+      {simPhase === 'waitingAtPickup' ? (
         <div className="px-4 mb-3">
           <button
-            onClick={onComplete}
+            onClick={onArrivedAtPickup}
             className="w-full h-10 rounded-full bg-brand-orange text-white text-sm font-medium"
           >
-            Завершить поездку
+            Я на месте
           </button>
         </div>
-      ) : order.status === 'searching' ? (
+      ) : canCancel ? (
         <div className="px-4 mb-3">
           <button
             onClick={onCancel}
@@ -1510,3 +2068,5 @@ function WeatherIcon() {
     </svg>
   )
 }
+
+
