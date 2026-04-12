@@ -4,6 +4,7 @@ import { ScanPage } from './routes/ScanPage'
 import { VerifyPage } from './routes/VerifyPage'
 import { BookingPage } from './routes/BookingPage'
 import { StatusPage } from './routes/StatusPage'
+import { StoriesPage } from './routes/StoriesPage'
 import { AdminLoginPage } from './routes/admin/AdminLoginPage'
 import { RequireAdmin } from './routes/admin/RequireAdmin'
 import { AdminDashboard } from './routes/admin/AdminDashboard'
@@ -21,6 +22,7 @@ export function App() {
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/status/:orderId" element={<StatusPage />} />
+          <Route path="/storis" element={<StoriesPage />} />
 
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
