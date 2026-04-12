@@ -21,7 +21,7 @@ export function AdminLocations() {
   }
 
   useEffect(() => {
-    if (user?.role !== 'admin') { navigate('/login'); return }
+    if (user?.role !== 'admin') { navigate('/admin/login'); return }
     loadData()
   }, [user, navigate])
 

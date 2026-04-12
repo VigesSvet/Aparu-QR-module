@@ -15,7 +15,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (user?.role !== 'admin') {
-      navigate('/login')
+      navigate('/admin/login')
       return
     }
     Promise.all([
@@ -46,7 +46,7 @@ export function AdminDashboard() {
           <h1 className="text-xl font-bold text-text-primary">APARU</h1>
         </div>
         <button
-          onClick={() => { logout(); navigate('/login') }}
+          onClick={() => { logout(); navigate('/admin/login') }}
           className="text-sm text-text-muted hover:text-red-500 transition-colors"
         >
           Выйти

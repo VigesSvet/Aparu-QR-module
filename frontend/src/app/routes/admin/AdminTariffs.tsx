@@ -66,7 +66,7 @@ export function AdminTariffs() {
 
   useEffect(() => {
     if (user?.role !== 'admin') {
-      navigate('/login')
+      navigate('/admin/login')
       return
     }
     loadData()
