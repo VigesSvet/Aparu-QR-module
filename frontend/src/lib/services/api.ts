@@ -157,7 +157,7 @@ export interface OrderOut {
   destination_address: string
   destination_lat: number | null
   destination_lng: number | null
-  status: 'searching' | 'assigned' | 'driving' | 'arrived' | 'completed' | 'cancelled'
+  status: 'searching' | 'assigned' | 'driving' | 'arrived' | 'in_trip' | 'completed' | 'cancelled'
   price: number
   created_at: string
   updated_at: string

@@ -17,6 +17,7 @@ class OrderStatus(str, enum.Enum):
     assigned = "assigned"
     driving = "driving"
     arrived = "arrived"
+    in_trip = "in_trip"
     completed = "completed"
     cancelled = "cancelled"
 

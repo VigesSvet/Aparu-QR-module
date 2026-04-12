@@ -21,7 +21,7 @@ class OrderCreate(BaseModel):
 
 
 class OrderStatusUpdate(BaseModel):
-    status: str = Field(..., description="New status: assigned, driving, arrived, completed, cancelled")
+    status: str = Field(..., description="New status: assigned, driving, arrived, in_trip, completed, cancelled")
 
 
 class OrderOut(BaseModel):
