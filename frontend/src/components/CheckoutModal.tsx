@@ -188,7 +188,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
             {phoneState === 'input' ? (
               <>
                 <label className="text-sm font-medium text-text-primary">Номер телефона</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
                   <input
                     type="tel"
                     placeholder="+7 (___) ___-__-__"
@@ -199,7 +199,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                     }}
                     readOnly={verified && !!user}
                     className={[
-                      'flex-1 h-12 rounded-btn border bg-white px-4',
+                      'min-w-0 w-full h-12 rounded-btn border bg-white px-4',
                       'text-base font-medium text-text-primary placeholder:text-text-muted placeholder:font-normal',
                       'transition-colors outline-none',
                       verified && user ? 'bg-gray-50 text-text-muted cursor-default' : '',
@@ -213,7 +213,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                       onClick={sendCode}
                       disabled={!phoneReady || loading}
                       className={[
-                        'h-12 px-4 rounded-btn text-sm font-medium transition-colors shrink-0',
+                        'h-12 px-4 rounded-btn text-sm font-medium transition-colors shrink-0 whitespace-nowrap',
                         phoneReady && !loading
                           ? 'bg-brand-orange text-white'
                           : 'bg-gray-100 text-text-muted cursor-default',
