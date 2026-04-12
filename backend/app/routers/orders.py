@@ -28,12 +28,24 @@ EMULATION_TIMELINE = (
     (15, OrderStatus.driving),
     (30, OrderStatus.arrived),
 )
+IN_TRIP_COMPLETION_SECONDS = 15
+
+STATUS_PROGRESS = {
+    OrderStatus.searching: 0,
+    OrderStatus.assigned: 1,
+    OrderStatus.driving: 2,
+    OrderStatus.arrived: 3,
+    OrderStatus.in_trip: 4,
+    OrderStatus.completed: 5,
+    OrderStatus.cancelled: 5,
+}
 
 USER_TRANSITIONS = {
-    OrderStatus.searching: [OrderStatus.cancelled],
-    OrderStatus.assigned: [OrderStatus.cancelled],
-    OrderStatus.driving: [OrderStatus.cancelled],
-    OrderStatus.arrived: [OrderStatus.completed],
+    OrderStatus.searching: [OrderStatus.assigned, OrderStatus.cancelled],
+    OrderStatus.assigned: [OrderStatus.driving, OrderStatus.cancelled],
+    OrderStatus.driving: [OrderStatus.arrived, OrderStatus.cancelled],
+    OrderStatus.arrived: [OrderStatus.in_trip, OrderStatus.completed],
+    OrderStatus.in_trip: [OrderStatus.completed],
 }
 
 
@@ -103,11 +115,19 @@ def _emulated_status(order: Order) -> OrderStatus:
     if order.status in {OrderStatus.completed, OrderStatus.cancelled}:
         return order.status
 
+    if order.status == OrderStatus.in_trip:
+        in_trip_seconds = (datetime.now(timezone.utc) - _normalize_dt(order.updated_at)).total_seconds()
+        if in_trip_seconds >= IN_TRIP_COMPLETION_SECONDS:
+            return OrderStatus.completed
+        return order.status
+
     elapsed_seconds = (datetime.now(timezone.utc) - _normalize_dt(order.created_at)).total_seconds()
     target = OrderStatus.searching
     for threshold, status_value in EMULATION_TIMELINE:
         if elapsed_seconds >= threshold:
             target = status_value
+    if STATUS_PROGRESS[order.status] > STATUS_PROGRESS[target]:
+        return order.status
     return target
 
 
