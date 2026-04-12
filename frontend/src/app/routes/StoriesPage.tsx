@@ -121,7 +121,7 @@ export function StoriesPage() {
             key={story.id}
             src={story.src}
             alt={`Story ${story.id}`}
-            className={`absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-300 ${idx === currentIdx ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
+            className={`absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-300 ${idx === currentIdx ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
           />
         ))}
 
