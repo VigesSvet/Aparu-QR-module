@@ -55,9 +55,11 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
 
   const codeInputRef = useRef<HTMLInputElement>(null)
+  const isEditingPhone = useRef(false)
 
   // Sync phone when user authenticates while modal is open
   useEffect(() => {
+    if (isEditingPhone.current) return
     if (user && !phone) setPhone(formatPhone(user.phone))
     if (user) setVerified(true)
   }, [user, phone])
@@ -112,6 +114,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
     setLoading(true)
     try {
       await login(getPhoneDigits(phone), code)
+      isEditingPhone.current = false
       setVerified(true)
     } catch (e: any) {
       setCodeError(e.message ?? 'Неверный код')
@@ -121,6 +124,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   }
 
   function resetPhone() {
+    isEditingPhone.current = true
     setPhone('')
     setPhoneState('input')
     setCode('')
@@ -265,7 +269,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                       setCodeError('')
                       setLoading(true)
                       login(getPhoneDigits(phone), val)
-                        .then(() => setVerified(true))
+                        .then(() => { isEditingPhone.current = false; setVerified(true) })
                         .catch((err: any) => setCodeError(err.message ?? 'Неверный код'))
                         .finally(() => setLoading(false))
                     }

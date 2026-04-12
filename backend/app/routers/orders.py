@@ -6,6 +6,7 @@ Order statuses are emulated automatically without driver logic.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +21,7 @@ from app.models.order import Order, OrderStatus
 from app.models.tariff import Tariff
 from app.models.user import User, UserRole
 from app.schemas.orders import OrderCreate, OrderOut, OrderStatusUpdate
+from app.services.telegram_notify import auto_subscribe_for_new_order, notify_order_status
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -133,14 +135,19 @@ def _emulated_status(order: Order) -> OrderStatus:
 
 async def _apply_status_emulation(db: AsyncSession, orders: list[Order]) -> None:
     changed = False
+    changed_orders: list[tuple[int, str]] = []
     for order in orders:
         target = _emulated_status(order)
         if target != order.status:
             order.status = target
             changed = True
+            changed_orders.append((order.id, target.value))
 
     if changed:
         await db.commit()
+        # Fire-and-forget Telegram notifications for emulated status changes
+        for order_id, new_status in changed_orders:
+            asyncio.create_task(notify_order_status(order_id, new_status))
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -177,6 +184,18 @@ async def create_order(
     )
     db.add(order)
     await db.commit()
+
+    # Auto-subscribe the user's Telegram chat to this new order if they
+    # previously subscribed via the bot for any earlier order.
+    past_orders_result = await db.execute(
+        select(Order.id).where(
+            Order.user_id == user.id,
+            Order.id != order.id,
+        )
+    )
+    past_order_ids = [row[0] for row in past_orders_result.all()]
+    if past_order_ids:
+        asyncio.create_task(auto_subscribe_for_new_order(order.id, past_order_ids))
 
     result = await db.execute(_order_query().where(Order.id == order.id))
     return _order_to_out(result.scalar_one())
@@ -254,4 +273,8 @@ async def update_order_status(
         order.status = new_status
 
     await db.commit()
+
+    # Fire-and-forget Telegram notification
+    asyncio.create_task(notify_order_status(order.id, new_status.value))
+
     return _order_to_out(order)

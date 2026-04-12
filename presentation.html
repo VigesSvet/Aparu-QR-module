@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APARU — QR-сервис заказа такси | VERTEX</title>
+  <meta name="description"
+    content="Презентация хакатон-проекта APARU — QR-сервис моментального заказа такси. Команда VERTEX." />
+
+  <!-- Reveal.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme" />
+
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
+
+  <style>
+    /* ===== GLOBAL ===== */
+    :root {
+      --accent: #FF5500;
+      --accent-glow: rgba(255, 85, 0, 0.35);
+      --bg-dark: #0a0a0f;
+      --bg-card: rgba(255, 255, 255, 0.04);
+      --bg-card-hover: rgba(255, 255, 255, 0.07);
+      --text-primary: #f0f0f5;
+      --text-secondary: rgba(240, 240, 245, 0.6);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --gradient-accent: linear-gradient(135deg, #FF5500 0%, #FF8800 100%);
+    }
+
+    .reveal-viewport {
+      background: var(--bg-dark);
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(255, 85, 0, 0.03) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(100, 100, 255, 0.02) 0%, transparent 50%);
+    }
+
+    .reveal {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 28px;
+      color: var(--text-primary);
+    }
+
+    .reveal h1,
+    .reveal h2,
+    .reveal h3 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      text-transform: none;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--text-primary);
+    }
+
+    .reveal h1 {
+      font-size: 2.6em;
+    }
+
+    .reveal h2 {
+      font-size: 1.8em;
+      margin-bottom: 0.8em;
+    }
+
+    .reveal h3 {
+      font-size: 1.2em;
+    }
+
+    .reveal p,
+    .reveal li {
+      line-height: 1.65;
+      color: var(--text-secondary);
+    }
+
+    .reveal ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    /* ===== VERTEX BRAND ===== */
+    .vertex-brand {
+      font-family: Impact, 'Arial Black', 'Haettenschweiler', sans-serif;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(255, 85, 0, 0.15);
+    }
+
+    .vertex-brand.large {
+      font-size: 3.5em;
+    }
+
+    .vertex-brand.medium {
+      font-size: 2.4em;
+    }
+
+    .vertex-brand.small {
+      font-size: 1.6em;
+    }
+
+    /* ===== ACCENT HIGHLIGHT ===== */
+    .accent {
+      color: var(--accent);
+    }
+
+    .accent-gradient {
+      background: var(--gradient-accent);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 2em 1.8em;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 85, 0, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .card .card-icon {
+      font-size: 2em;
+      margin-bottom: 0.5em;
+      color: var(--accent);
+    }
+
+    .card h3 {
+      font-size: 1em;
+      font-weight: 700;
+      margin-bottom: 0.3em;
+      color: var(--text-primary);
+    }
+
+    .card p {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+
+    /* ===== GRID LAYOUTS ===== */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5em;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .split-layout {
+      display: flex;
+      align-items: center;
+      gap: 3em;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .split-layout .left {
+      flex: 0 0 320px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .split-layout .right {
+      flex: 1;
+      text-align: left;
+    }
+
+    .split-layout .right ul {
+      padding: 0;
+    }
+
+    .split-layout .right li {
+      font-size: 0.9em;
+      padding: 0.7em 0;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+      color: var(--text-primary);
+    }
+
+    .split-layout .right li i {
+      color: var(--accent);
+      font-size: 1.1em;
+      width: 1.4em;
+      text-align: center;
+    }
+
+    /* ===== PHONE MOCKUP ===== */
+    .phone-mockup {
+      width: 260px;
+      height: 520px;
+      border-radius: 36px;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.5),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      position: relative;
+      background: #111;
+    }
+
+    .phone-mockup img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .phone-mockup .notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 28px;
+      background: #000;
+      border-radius: 0 0 18px 18px;
+      z-index: 2;
+    }
+
+    /* ===== JOURNEY STEPS ===== */
+    .journey-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .journey-step {
+      text-align: center;
+      padding: 1.5em;
+      flex: 1;
+    }
+
+    .journey-step .step-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 0.8em;
+      font-size: 1.8em;
+      color: var(--accent);
+      transition: all 0.3s ease;
+    }
+
+    .journey-step:hover .step-icon {
+      border-color: var(--accent);
+      box-shadow: 0 0 24px var(--accent-glow);
+    }
+
+    .journey-step .step-num {
+      font-size: 0.65em;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.3em;
+    }
+
+    .journey-step h3 {
+      font-size: 0.85em;
+      margin-bottom: 0.2em;
+    }
+
+    .journey-step p {
+      font-size: 0.7em;
+    }
+
+    .journey-arrow {
+      font-size: 1.5em;
+      color: rgba(255, 255, 255, 0.15);
+      flex: 0 0 auto;
+      padding: 0 0.2em;
+    }
+
+    /* ===== FEATURE CARD (Slide 5) ===== */
+    .feature-card {
+      background: linear-gradient(135deg, rgba(255, 85, 0, 0.08) 0%, rgba(255, 136, 0, 0.03) 100%);
+      border: 1px solid rgba(255, 85, 0, 0.15);
+      border-radius: 20px;
+      padding: 2em 2.5em;
+      max-width: 600px;
+      margin: 1em auto;
+    }
+
+    .feature-card .route-label {
+      font-size: 0.7em;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0.3em;
+    }
+
+    .feature-card .route-name {
+      font-size: 1.2em;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.2em;
+    }
+
+    .feature-card .route-price {
+      font-size: 0.9em;
+      color: var(--text-secondary);
+    }
+
+    .feature-card .route-price span {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ===== TELEGRAM SECTION ===== */
+    .tg-visual {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5em;
+      margin-bottom: 1.5em;
+    }
+
+    .tg-visual i {
+      font-size: 3em;
+    }
+
+    .tg-visual .fa-telegram {
+      color: #2AABEE;
+    }
+
+    .tg-visual .fa-arrows-rotate {
+      color: var(--accent);
+    }
+
+    .tg-list li {
+      font-size: 0.85em;
+      padding: 0.65em 0;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.7em;
+      color: var(--text-primary);
+    }
+
+    .tg-list li i {
+      color: var(--accent);
+      margin-top: 0.15em;
+    }
+
+    /* ===== ARCHITECTURE ===== */
+    .arch-visual {
+      font-size: 4em;
+      color: var(--accent);
+      margin-bottom: 0.4em;
+      opacity: 0.7;
+    }
+
+    .arch-item {
+      max-width: 700px;
+      margin: 0.8em auto;
+      padding: 1.2em 1.8em;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      font-size: 0.95em;
+      display: flex;
+      align-items: center;
+      gap: 1em;
+      color: var(--text-primary);
+    }
+
+    .arch-item i {
+      color: var(--accent);
+      font-size: 1.3em;
+    }
+
+    /* ===== PROFIT / ZOOM BLOCKS ===== */
+    .profit-block {
+      max-width: 750px;
+      margin: 0.6em auto;
+      padding: 1.4em 2em;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .profit-block i {
+      font-size: 1.5em;
+      color: var(--accent);
+    }
+
+    /* ===== SUBTITLE / TAGLINE ===== */
+    .tagline {
+      font-size: 0.85em;
+      font-weight: 400;
+      color: var(--text-secondary);
+      margin-top: 0.5em;
+    }
+
+    /* ===== FOOTER TEXT ===== */
+    .footer-text {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+      margin-top: 2em;
+    }
+
+    /* ===== SLIDE SPECIFICS ===== */
+    .slide-title-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3em;
+    }
+
+    .slide-title-content h1 {
+      margin-bottom: 0;
+    }
+
+    /* ===== DECORATIVE LINE ===== */
+    .divider {
+      width: 60px;
+      height: 3px;
+      background: var(--gradient-accent);
+      border-radius: 3px;
+      margin: 0.5em auto 0.8em;
+    }
+
+    /* ===== PROGRESS BAR ===== */
+    .reveal .progress {
+      color: var(--accent);
+      height: 4px;
+    }
+
+    .reveal .controls {
+      color: var(--accent);
+    }
+
+    /* ===== FRAGMENT HIGHLIGHT OVERRIDE ===== */
+    .reveal .fragment.highlight-current-blue.current-fragment {
+      color: #60a5fa;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .cards-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .split-layout {
+        flex-direction: column;
+      }
+
+      .journey-container {
+        flex-direction: column;
+      }
+
+      .journey-arrow {
+        transform: rotate(90deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ======================== SLIDE 1: TITLE ======================== -->
+      <section>
+        <div class="slide-title-content">
+          <div class="vertex-brand large" style="margin-bottom: 0.15em;">VERTEX</div>
+          <div class="divider" style="width: 100px;"></div>
+          <h1 style="font-size: 2em; margin-top: 0.2em;">QR-сервис заказа такси <span class="accent">APARU</span></h1>
+          <p class="tagline" style="font-size: 1em; max-width: 600px;">
+            Моментальный заказ и конвертация холодного трафика
+          </p>
+        </div>
+      </section>
+
+      <!-- ======================== SLIDE 2: PROBLEM ======================== -->
+      <section>
+        <h2>С чем сталкивается <span class="accent">пользователь?</span></h2>
+        <div class="divider"></div>
+        <div class="cards-grid">
+
+          <div class="fragment fade-up card">
+            <div class="card-icon"><i class="fas fa-mobile-screen-button"></i></div>
+            <h3>Скачивание приложения</h3>
+            <p>Установка — это барьер. Пользователь хочет ехать, а не ждать загрузку.</p>
+          </div>
+
+          <div class="fragment fade-up card">
+            <div class="card-icon"><i class="fas fa-satellite-dish"></i></div>
+            <h3>Ошибки GPS</h3>
+            <p>Внутри ТРЦ и аэропортов GPS даёт погрешность до 200 метров.</p>
+          </div>
+
+          <div class="fragment fade-up card">
+            <div class="card-icon"><i class="fas fa-face-frown"></i></div>
+            <h3>Сорванные заказы</h3>
+            <p>Потеря прибыли и негатив от клиентов из-за некорректного адреса подачи.</p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ======================== SLIDE 3: SOLUTION ======================== -->
+      <section>
+        <h2>Решение: <span class="accent">Web-приложение по QR</span></h2>
+        <div class="divider"></div>
+        <div class="split-layout">
+          <div class="left">
+            <div class="phone-mockup">
+              <div class="notch"></div>
+              <img src="mockupscreenshot.png" alt="APARU Mobile UI" />
+            </div>
+          </div>
+          <div class="right">
+            <ul>
+              <li class="fragment fade-left">
+                <i class="fas fa-bolt"></i>
+                <span>Заказ <strong style="color:#fff;">в один клик</strong> — без установки приложения</span>
+              </li>
+              <li class="fragment fade-left">
+                <i class="fas fa-crosshairs"></i>
+                <span><strong style="color:#fff;">Hardcoded GPS</strong> координаты зашиты прямо в QR-код</span>
+              </li>
+              <li class="fragment fade-left">
+                <i class="fas fa-shield-halved"></i>
+                <span>Полное <strong style="color:#fff;">исключение ошибок</strong> позиционирования</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================== SLIDE 4: CUSTOMER JOURNEY ======================== -->
+      <section>
+        <h2>Customer Journey <span class="accent">(3 шага)</span></h2>
+        <div class="divider"></div>
+        <div class="journey-container">
+
+          <div class="fragment fade-right journey-step">
+            <div class="step-icon"><i class="fas fa-qrcode"></i></div>
+            <div class="step-num">Шаг 1</div>
+            <h3>Скан QR-кода</h3>
+            <p>Мгновенный расчёт тарифа</p>
+          </div>
+
+          <div class="journey-arrow fragment fade-in"><i class="fas fa-chevron-right"></i></div>
+
+          <div class="fragment fade-right journey-step">
+            <div class="step-icon"><i class="fas fa-comment-sms"></i></div>
+            <div class="step-num">Шаг 2</div>
+            <h3>Подтверждение</h3>
+            <p>Быстрая верификация по SMS</p>
+          </div>
+
+          <div class="journey-arrow fragment fade-in"><i class="fas fa-chevron-right"></i></div>
+
+          <div class="fragment fade-right journey-step">
+            <div class="step-icon"><i class="fas fa-car-side"></i></div>
+            <div class="step-num">Шаг 3</div>
+            <h3>Трекинг поездки</h3>
+            <p>Отслеживание прямо в браузере</p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ======================== SLIDE 5: TOURISM UPSELL ======================== -->
+      <section>
+        <h2>Апселл: <span class="accent">Туристические маршруты</span></h2>
+        <div class="divider"></div>
+
+        <p class="fragment fade-up"
+          style="color: var(--text-secondary); max-width: 650px; margin: 0 auto 1em; font-size: 0.9em;">
+          <i class="fas fa-hotel" style="color:var(--accent); margin-right:0.4em;"></i>
+          Интеграция для отелей и достопримечательностей
+        </p>
+
+        <div class="fragment fade-up feature-card">
+          <div class="route-label"><i class="fas fa-route"></i> Популярный маршрут</div>
+          <div class="route-name">🌃 Вечерний город</div>
+          <div class="route-price">Фиксированная цена — <span>4 500 ₸</span></div>
+        </div>
+
+        <p class="fragment fade-up"
+          style="font-size: 1em; font-weight: 600; color: var(--text-primary); max-width: 600px; margin: 1em auto 0;">
+          <i class="fas fa-arrow-trend-up" style="color:var(--accent); margin-right:0.4em;"></i>
+          Продаём <span class="accent">впечатления</span>, а не километры — выше чек
+        </p>
+      </section>
+
+      <!-- ======================== SLIDE 6: TELEGRAM BOT ======================== -->
+      <section>
+        <h2>Решение проблемы <span class="accent">закрытой вкладки</span></h2>
+        <div class="divider"></div>
+
+        <div class="tg-visual">
+          <i class="fab fa-telegram"></i>
+          <i class="fas fa-arrows-rotate fa-spin" style="animation-duration: 3s;"></i>
+          <i class="fas fa-mobile-screen" style="font-size: 2.8em; color: var(--text-secondary);"></i>
+        </div>
+
+        <ul class="tg-list" style="max-width: 700px; margin: 0 auto;">
+          <li class="fragment fade-in">
+            <i class="fas fa-triangle-exclamation"></i>
+            <span>Web-вкладку легко потерять при переключении приложений</span>
+          </li>
+          <li class="fragment fade-up">
+            <i class="fab fa-telegram" style="color:#2AABEE;"></i>
+            <span>Бесшовная интеграция с <strong style="color:#fff;">Telegram-ботом</strong> — трекер сессии в
+              чате</span>
+          </li>
+          <li class="fragment fade-up">
+            <i class="fas fa-bullseye"></i>
+            <span>Сбор ID пользователей для <strong style="color:#fff;">бесплатного ретаргетинга</strong> — «Нужно в
+              аэропорт?»</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ======================== SLIDE 7: ARCHITECTURE ======================== -->
+      <section>
+        <h2><span class="accent">Масштабируемость</span></h2>
+        <div class="divider"></div>
+
+        <div class="arch-visual">
+          <i class="fas fa-network-wired"></i>
+        </div>
+
+        <div class="fragment fade-up arch-item">
+          <i class="fas fa-feather-pointed"></i>
+          <span>Легковесный фронтенд и стабильный бэкенд — минимальная задержка</span>
+        </div>
+
+        <div class="fragment fade-up arch-item">
+          <i class="fas fa-chart-line"></i>
+          <span>Готовность к десяткам тысяч сканирований в день</span>
+        </div>
+      </section>
+
+      <!-- ======================== SLIDE 8: PROFIT & FINALE ======================== -->
+      <section>
+        <h2>Профит для <span class="accent">APARU</span></h2>
+        <div class="divider"></div>
+
+        <div class="fragment zoom-in profit-block">
+          <i class="fas fa-users"></i>
+          <span>Новые пользователи <strong style="color:var(--accent);">без барьеров</strong></span>
+        </div>
+
+        <div class="fragment zoom-in profit-block">
+          <i class="fas fa-gem"></i>
+          <span>Монетизация <strong style="color:var(--accent);">туристического трафика</strong></span>
+        </div>
+
+        <div class="fragment zoom-in profit-block">
+          <i class="fas fa-rotate"></i>
+          <span>Конверсия одноразового трафика в лояльных клиентов — <strong style="color:var(--accent);">CTA:
+              Установите приложение</strong></span>
+        </div>
+
+        <p class="footer-text fragment fade-up"
+          style="margin-top: 1.5em; font-size: 1em; color: var(--text-secondary);">
+          Спасибо за внимание!
+        </p>
+
+        <div class="fragment fade-up vertex-brand medium" style="margin-top: 0.5em;">VERTEX</div>
+      </section>
+
+    </div><!-- /slides -->
+  </div><!-- /reveal -->
+
+  <!-- Reveal.js Core -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      center: true,
+      transition: 'slide',
+      transitionSpeed: 'default',
+      backgroundTransition: 'fade',
+      width: 1280,
+      height: 720,
+      margin: 0.08,
+      controlsTutorial: false,
+      progress: true,
+      slideNumber: 'c/t',
+      pdfSeparateFragments: false,
+    });
+  </script>
+</body>
+
+</html>

@@ -9,4 +9,19 @@ frontend/.vite/
 backend/.vite/
 .env
 .env.*
+!.env.example
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# SQLite databases (runtime data)
+*.db
+
+# User uploads (runtime data)
+backend/uploads/
+
+# IDE / tool configs
+.claude/

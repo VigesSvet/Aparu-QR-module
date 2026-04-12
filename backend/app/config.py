@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # ── Database (SQLite stub — DB not implemented yet) ──
     DATABASE_URL: str = "sqlite+aiosqlite:///./aparu_qr.db"
 
+    # ── Telegram Bot ─────────────────────────────────────
+    BOT_TOKEN: str = ""
+    BOT_STORE_DB_PATH: str = "../bot/bot_store.db"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

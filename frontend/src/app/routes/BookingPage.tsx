@@ -13,6 +13,8 @@ import type {
 import { Button } from '@/components/Button'
 import { CheckoutModal } from '@/components/CheckoutModal'
 import { FlappyCarGame } from '@/components/FlappyCarGame'
+import { TourismBottomSheet } from '@/components/TourismBottomSheet'
+import { BotBridge, type BotBridgeContext } from '@/components/BotBridge'
 import { getActiveScanLocationId, getRepeatScanPath } from '@/lib/scanContext'
 
 type LngLat = [number, number]
@@ -477,6 +479,9 @@ export function BookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [tourismOpen, setTourismOpen] = useState(false)
+  // BotBridge: {payload, context} when the banner should be shown, null to hide
+  const [botBridge, setBotBridge] = useState<{ payload: string; context: BotBridgeContext } | null>(null)
   const [simPhase, setSimPhase] = useState<SimPhase>('idle')
   const [assignedDriver, setAssignedDriver] = useState<TariffDriverPreset | null>(null)
   const [waitingSeconds, setWaitingSeconds] = useState(0)
@@ -1348,6 +1353,7 @@ export function BookingPage() {
       requestNotificationPermission()
       resetSimulationState()
       setActiveOrderId(order.id)
+      setBotBridge({ payload: `order_${order.id}`, context: 'taxi' })
       setActiveOrder(order)
       setAssignedDriver(null)
       setWaitingSeconds(0)
@@ -1753,8 +1759,14 @@ export function BookingPage() {
               Важное
             </p>
             <div className="px-4 pb-4 flex flex-col gap-3">
+              <BotBridge
+                payload={botBridge?.payload ?? null}
+                context={botBridge?.context ?? 'taxi'}
+                onDismiss={() => setBotBridge(null)}
+              />
               <WeatherSlide inactive={hasActiveTrip} />
               <BonusGameBanner />
+              <TourismBanner onOpen={() => setTourismOpen(true)} />
             </div>
           </div>
         </div>
@@ -1881,6 +1893,15 @@ export function BookingPage() {
           submitError={submitError}
         />
       )}
+
+      <TourismBottomSheet
+        open={tourismOpen}
+        onClose={() => setTourismOpen(false)}
+        onRouteSelect={(routeId) => {
+          setTourismOpen(false)
+          setBotBridge({ payload: `tour_${routeId}`, context: 'tourism' })
+        }}
+      />
     </div>
   )
 }
@@ -2052,13 +2073,37 @@ function TripSlide({
       </div>
 
       {/* App download */}
-      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
-          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
-        </div>
-        <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
-          <span className="text-white text-xs font-bold">A</span>
+      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-3">
+        <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
+        <p className="text-[11px] text-text-muted mt-0.5 mb-2">Удобнее и быстрее заказывать такси</p>
+        <div className="flex gap-2">
+          <a
+            href="https://apps.apple.com/ru/app/aparu-%D0%BB%D1%83%D1%87%D1%88%D0%B5-%D1%87%D0%B5%D0%BC-%D1%82%D0%B0%D0%BA%D1%81%D0%B8/id997499904"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91 1.65.17 3.19.89 4.22 2.44-3.52 2.1-2.96 7.21.6 8.54-.7 1.83-1.54 3.54-2.03 4.68z"/><path d="M15.11 3.53c-.7.83-1.76 1.34-2.82 1.28-.15-1.12.35-2.26 1-3 .71-.82 1.86-1.35 2.87-1.31.17 1.14-.32 2.18-1.05 3.03z"/></svg>
+            App Store
+          </a>
+          <a
+            href="https://play.google.com/store/apps/details?id=kz.aparu.aparupassenger"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#34A853"><path d="M4.5 2.5C4.22 2.78 4 3.25 4 3.87v16.26c0 .62.22 1.09.5 1.37l.14.14 9.38-9.39v-.51L4.64 2.36 4.5 2.5zm10.74 8.7L12.5 8.46l-7.3-7.3 12.63 7.2c.42.24.68.65.68 1.11 0 .46-.26.87-.68 1.11zM18.7 13l-3.46-3.46L11 12.5v.51l4.24 4.24L18.7 13z"/></svg>
+            Google Play
+          </a>
+          <a
+            href="https://appgallery.huawei.com/#/app/C103097503"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.11 16.3h-1.63v-3.26h-2.17v3.26H11.6v-3.26H9.43v3.26H7.8V7.7h1.63v3.26h2.17V7.7h1.72v3.26h2.17V7.7h1.62v8.6z"/></svg>
+            AppGallery
+          </a>
         </div>
       </div>
     </div>
@@ -2121,13 +2166,37 @@ function CompletedSlide({
       </div>
 
       {/* App download */}
-      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-2.5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
-          <p className="text-[11px] text-text-muted mt-0.5">Удобнее и быстрее заказывать такси</p>
-        </div>
-        <div className="shrink-0 w-8 h-8 rounded-xl bg-brand-orange flex items-center justify-center">
-          <span className="text-white text-xs font-bold">A</span>
+      <div className="mx-4 mb-3 rounded-xl bg-surface-warm px-3 py-3">
+        <p className="text-xs font-semibold text-text-primary">Скачайте приложение</p>
+        <p className="text-[11px] text-text-muted mt-0.5 mb-2">Удобнее и быстрее заказывать такси</p>
+        <div className="flex gap-2">
+          <a
+            href="https://apps.apple.com/ru/app/aparu-%D0%BB%D1%83%D1%87%D1%88%D0%B5-%D1%87%D0%B5%D0%BC-%D1%82%D0%B0%D0%BA%D1%81%D0%B8/id997499904"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91 1.65.17 3.19.89 4.22 2.44-3.52 2.1-2.96 7.21.6 8.54-.7 1.83-1.54 3.54-2.03 4.68z"/><path d="M15.11 3.53c-.7.83-1.76 1.34-2.82 1.28-.15-1.12.35-2.26 1-3 .71-.82 1.86-1.35 2.87-1.31.17 1.14-.32 2.18-1.05 3.03z"/></svg>
+            App Store
+          </a>
+          <a
+            href="https://play.google.com/store/apps/details?id=kz.aparu.aparupassenger"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#34A853"><path d="M4.5 2.5C4.22 2.78 4 3.25 4 3.87v16.26c0 .62.22 1.09.5 1.37l.14.14 9.38-9.39v-.51L4.64 2.36 4.5 2.5zm10.74 8.7L12.5 8.46l-7.3-7.3 12.63 7.2c.42.24.68.65.68 1.11 0 .46-.26.87-.68 1.11zM18.7 13l-3.46-3.46L11 12.5v.51l4.24 4.24L18.7 13z"/></svg>
+            Google Play
+          </a>
+          <a
+            href="https://appgallery.huawei.com/#/app/C103097503"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 h-8 rounded-lg bg-black text-white text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.11 16.3h-1.63v-3.26h-2.17v3.26H11.6v-3.26H9.43v3.26H7.8V7.7h1.63v3.26h2.17V7.7h1.72v3.26h2.17V7.7h1.62v8.6z"/></svg>
+            AppGallery
+          </a>
         </div>
       </div>
     </div>
@@ -2202,6 +2271,66 @@ function BonusGameBanner() {
   )
 }
 
+function TourismBanner({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden relative"
+      style={{ background: 'linear-gradient(135deg, #FC6500 0%, #FF9533 60%, #FFB84D 100%)' }}
+    >
+      {/* Palm tree — left */}
+      <div className="absolute left-0 bottom-0 pointer-events-none select-none">
+        <svg width="72" height="80" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Trunk */}
+          <path d="M32 80 C33 65 31 52 34 38 C35 30 36 22 35 14" stroke="white" strokeOpacity="0.7" strokeWidth="4" strokeLinecap="round" />
+          {/* Left leaf */}
+          <path d="M35 18 C28 10 14 8 8 14 C16 14 24 18 30 26" fill="white" fillOpacity="0.55" />
+          {/* Right leaf */}
+          <path d="M35 18 C42 10 56 6 62 12 C54 13 46 18 40 26" fill="white" fillOpacity="0.55" />
+          {/* Center-left leaf */}
+          <path d="M35 18 C22 14 16 20 16 28 C22 22 30 20 35 26" fill="white" fillOpacity="0.40" />
+          {/* Center-right leaf */}
+          <path d="M35 18 C48 14 54 22 52 30 C46 24 40 22 35 26" fill="white" fillOpacity="0.40" />
+          {/* Top-left leaf */}
+          <path d="M35 14 C30 4 18 2 12 8 C20 8 28 12 33 20" fill="white" fillOpacity="0.30" />
+        </svg>
+      </div>
+
+      {/* Sun — right */}
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none select-none">
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Rays */}
+          <line x1="28" y1="2" x2="28" y2="10" stroke="white" strokeOpacity="0.7" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="28" y1="46" x2="28" y2="54" stroke="white" strokeOpacity="0.7" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="2" y1="28" x2="10" y2="28" stroke="white" strokeOpacity="0.7" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="46" y1="28" x2="54" y2="28" stroke="white" strokeOpacity="0.7" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="8.69" y1="8.69" x2="14.34" y2="14.34" stroke="white" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="41.66" y1="41.66" x2="47.31" y2="47.31" stroke="white" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="47.31" y1="8.69" x2="41.66" y2="14.34" stroke="white" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="14.34" y1="41.66" x2="8.69" y2="47.31" stroke="white" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Core */}
+          <circle cx="28" cy="28" r="13" fill="white" fillOpacity="0.85" />
+          <circle cx="28" cy="28" r="9" fill="white" fillOpacity="0.95" />
+        </svg>
+      </div>
+
+      {/* Content */}
+      <div className="relative z-10 pl-20 pr-20 py-4">
+        <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mb-1">Специальное предложение</p>
+        <p className="text-[15px] font-bold text-white leading-snug">
+          Туризм<br />с комфортом
+        </p>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="mt-3 bg-white text-brand-orange text-xs font-bold px-4 py-1.5 rounded-full shadow-sm active:scale-95 transition-transform"
+        >
+          Узнать →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function WeatherSlide({ inactive }: { inactive: boolean }) {
   return (
     <div
@@ -2214,7 +2343,7 @@ function WeatherSlide({ inactive }: { inactive: boolean }) {
       <div className="flex items-center gap-2">
         <WeatherIcon />
         <div>
-          <p className="text-xl font-bold text-text-primary leading-none">—°C</p>
+          <p className="text-xl font-bold text-text-primary leading-none">18°C</p>
           <p className="text-[11px] text-text-muted mt-0.5">Погода</p>
         </div>
       </div>
@@ -2223,7 +2352,7 @@ function WeatherSlide({ inactive }: { inactive: boolean }) {
 
       {/* Right: surcharge */}
       <div className="text-right">
-        <p className="text-xl font-bold text-text-primary leading-none">+—%</p>
+        <p className="text-xl font-bold text-text-primary leading-none">+30%</p>
         <p className="text-[11px] text-text-muted mt-0.5">Наценка</p>
       </div>
     </div>
