@@ -157,7 +157,7 @@ export interface OrderOut {
   destination_address: string
   destination_lat: number | null
   destination_lng: number | null
-  status: 'searching' | 'assigned' | 'driving' | 'arrived' | 'completed' | 'cancelled'
+  status: 'searching' | 'assigned' | 'driving' | 'arrived' | 'in_trip' | 'completed' | 'cancelled'
   price: number
   created_at: string
   updated_at: string
@@ -183,6 +183,47 @@ export const orders = {
     request<OrderOut>(`/api/v1/orders/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+}
+
+export interface StoryOut {
+  id: number
+  filename: string
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+async function uploadRequest<T = unknown>(path: string, formData: FormData): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (_token) headers.Authorization = `Bearer ${_token}`
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new ApiError(res.status, body.detail ?? 'Unknown error')
+  }
+
+  return res.json()
+}
+
+export const stories = {
+  list: () => request<StoryOut[]>('/api/v1/stories'),
+  upload: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return uploadRequest<StoryOut>('/api/v1/stories', form)
+  },
+  delete: (id: number) => request<void>(`/api/v1/stories/${id}`, { method: 'DELETE' }),
+  reorder: (items: { id: number; sort_order: number }[]) =>
+    request<void>('/api/v1/stories/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ items }),
     }),
 }
 

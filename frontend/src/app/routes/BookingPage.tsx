@@ -140,7 +140,7 @@ const SIM_PHASE_TO_ORDER_STATUS: Record<Exclude<SimPhase, 'idle' | 'completed'>,
   assignedPreview: 'assigned',
   approachingPickup: 'driving',
   waitingAtPickup: 'arrived',
-  inTrip: 'driving',
+  inTrip: 'in_trip',
 }
 
 function getAutoTariffPeriod(now = new Date()): TariffPeriod {
@@ -241,6 +241,22 @@ function resolveDriverPreset(tariffName?: string | null) {
   return DRIVER_PRESETS.find((preset) => normalized.includes(preset.tariffMatch)) ?? DRIVER_PRESETS[0]
 }
 
+function getOrderDestinationPoint(order: OrderOut | null): Point | null {
+  if (!order) return null
+  if (order.destination_lat === null || order.destination_lng === null) return null
+  return {
+    address: order.destination_address || '—',
+    lat: order.destination_lat,
+    lng: order.destination_lng,
+  }
+}
+
+function getStatusStartedAtMs(order: OrderOut | null) {
+  if (!order) return null
+  const parsed = new Date(order.updated_at).getTime()
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function distanceBetweenPoints(a: LngLat, b: LngLat) {
   const lngScale = Math.cos(((a[1] + b[1]) / 2) * Math.PI / 180)
   const dx = (a[0] - b[0]) * lngScale
@@ -272,6 +288,40 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function getAnimationSnapshot(
+  coordinates: LngLat[],
+  durationMs: number,
+  elapsedMs: number,
+) {
+  if (!coordinates.length) return null
+  if (coordinates.length === 1) {
+    return {
+      progress: 1,
+      coordinate: coordinates[0],
+      heading: 0,
+      remainingCoordinates: coordinates,
+    }
+  }
+
+  const progress = clamp(elapsedMs / durationMs, 0, 1)
+  const scaledIndex = progress * (coordinates.length - 1)
+  const index = Math.min(Math.floor(scaledIndex), coordinates.length - 2)
+  const nextIndex = Math.min(index + 1, coordinates.length - 1)
+  const localProgress = scaledIndex - index
+  const from = coordinates[index]
+  const to = coordinates[nextIndex]
+  const lng = from[0] + (to[0] - from[0]) * localProgress
+  const lat = from[1] + (to[1] - from[1]) * localProgress
+  const coordinate: LngLat = [lng, lat]
+
+  return {
+    progress,
+    coordinate,
+    heading: getHeading(from, to),
+    remainingCoordinates: [coordinate, ...coordinates.slice(nextIndex)],
+  }
+}
+
 function emptyFeatureCollection() {
   return { type: 'FeatureCollection' as const, features: [] }
 }
@@ -286,6 +336,9 @@ function lineFeatureFromCoordinates(coordinates: LngLat[]) {
 }
 
 const ACTIVE_ORDER_KEY = 'aparu_active_order_id'
+const WAITING_STARTED_AT_KEY = 'aparu_waiting_started_at'
+const BOOKING_POINT_A_KEY_PREFIX = 'aparu_booking_point_a'
+const BOOKING_POINT_B_KEY_PREFIX = 'aparu_booking_point_b'
 
 const NOTIFICATION_MESSAGES: Record<string, { title: string; body: string }> = {
   assigned: { title: 'Водитель назначен', body: 'Заказ подтверждён, водитель принял заказ' },
@@ -308,8 +361,69 @@ function showStatusNotification(status: string) {
   new Notification(msg.title, { body: msg.body, icon: '/favicon.ico' })
 }
 
+function persistWaitingStartedAt(timestamp: number | null) {
+  if (timestamp === null) {
+    localStorage.removeItem(WAITING_STARTED_AT_KEY)
+    return
+  }
+  localStorage.setItem(WAITING_STARTED_AT_KEY, String(timestamp))
+}
+
+function readPersistedWaitingStartedAt() {
+  const stored = localStorage.getItem(WAITING_STARTED_AT_KEY)
+  if (!stored) return null
+  const parsed = Number(stored)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function getPersistedPointAKey(locationId: number) {
+  return `${BOOKING_POINT_A_KEY_PREFIX}_${locationId}`
+}
+
+function getPersistedPointBKey(locationId: number) {
+  return `${BOOKING_POINT_B_KEY_PREFIX}_${locationId}`
+}
+
+function persistPoint(storageKey: string, point: Point | null) {
+  if (!point) {
+    sessionStorage.removeItem(storageKey)
+    return
+  }
+  sessionStorage.setItem(storageKey, JSON.stringify(point))
+}
+
+function readPersistedPoint(storageKey: string): Point | null {
+  const stored = sessionStorage.getItem(storageKey)
+  if (!stored) return null
+
+  try {
+    const parsed = JSON.parse(stored) as Partial<Point>
+    const { address, lat, lng } = parsed
+    if (
+      typeof address !== 'string'
+      || typeof lat !== 'number'
+      || !Number.isFinite(lat)
+      || typeof lng !== 'number'
+      || !Number.isFinite(lng)
+    ) {
+      return null
+    }
+
+    return {
+      address,
+      lat,
+      lng,
+    }
+  } catch {
+    return null
+  }
+}
+
 export function BookingPage() {
   const navigate = useNavigate()
+  const initialScanLocationId = getActiveScanLocationId()
+  const pointAStorageKey = getPersistedPointAKey(initialScanLocationId)
+  const pointBStorageKey = getPersistedPointBKey(initialScanLocationId)
 
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -323,18 +437,22 @@ export function BookingPage() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelScrollRef = useRef<HTMLDivElement>(null)
   const isProgrammaticMoveRef = useRef(false)
+  const userMapMoveRef = useRef(false)
   const hasActiveOrderRef = useRef(false)
+  const completedSummaryRef = useRef(false)
   const pointARef = useRef<Point | null>(null)
   const pointBRef = useRef<Point | null>(null)
   const fieldTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevOrderStatusRef = useRef<string | null>(null)
   const arrivedAtRef = useRef<number | null>(null)
   const routeInfoRef = useRef<RouteInfo | null>(null)
+  const activeCarSimulationRef = useRef<ActiveCarSimulation | null>(null)
   const simulationTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const simulationFrameRef = useRef<number | null>(null)
   const simulationRunIdRef = useRef(0)
 
   const [mapDragging, setMapDragging] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
   // displayField drives the floating marker visuals and lags behind activeField during pan
   const [displayField, setDisplayField] = useState<ActiveField>('B')
   // true while the camera is flying between fields — hides floating marker, keeps both static
@@ -345,8 +463,8 @@ export function BookingPage() {
   const [tariffList, setTariffList] = useState<TariffOut[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<TariffPeriod>(() => getAutoTariffPeriod())
   const [selectedTariff, setSelectedTariff] = useState<number | null>(null)
-  const [pointA, setPointA] = useState<Point | null>(null)
-  const [pointB, setPointB] = useState<Point | null>(null)
+  const [pointA, setPointA] = useState<Point | null>(() => readPersistedPoint(pointAStorageKey))
+  const [pointB, setPointB] = useState<Point | null>(() => readPersistedPoint(pointBStorageKey))
   const [activeField, setActiveField] = useState<ActiveField>('B')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchField, setSearchField] = useState<ActiveField>('B')
@@ -360,7 +478,6 @@ export function BookingPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [simPhase, setSimPhase] = useState<SimPhase>('idle')
   const [assignedDriver, setAssignedDriver] = useState<TariffDriverPreset | null>(null)
-  const [activeCarSimulation, setActiveCarSimulation] = useState<ActiveCarSimulation | null>(null)
   const [waitingSeconds, setWaitingSeconds] = useState(0)
   const [approachRouteCoords, setApproachRouteCoords] = useState<LngLat[]>([])
   const [tripRouteCoords, setTripRouteCoords] = useState<LngLat[]>([])
@@ -406,16 +523,24 @@ export function BookingPage() {
     source?.setData(lineFeatureFromCoordinates(coordinates))
   }
 
-  function hideDecorativeCar(index: number | null, hidden: boolean) {
-    if (index === null) return
-    const marker = decorativeMarkersRef.current[index]
-    if (marker) marker.getElement().style.opacity = hidden ? '0.12' : '1'
+  function shouldShowDecorativeCars(order: OrderOut | null, phase: SimPhase, completed: boolean) {
+    return !order && phase === 'idle' && !completed
+  }
+
+  function setDecorativeCarsVisible(visible: boolean) {
+    decorativeMarkersRef.current.forEach((marker) => {
+      const element = marker.getElement()
+      element.style.display = visible ? 'block' : 'none'
+      element.style.opacity = visible ? '1' : '0'
+      element.style.visibility = visible ? 'visible' : 'hidden'
+      element.style.pointerEvents = visible ? 'auto' : 'none'
+    })
   }
 
   function removeActiveCarMarker() {
     activeCarMarkerRef.current?.remove()
     activeCarMarkerRef.current = null
-    setActiveCarSimulation(null)
+    activeCarSimulationRef.current = null
   }
 
   function ensureActiveCarMarker(coordinate: LngLat, heading: number, color: string) {
@@ -437,22 +562,6 @@ export function BookingPage() {
     return activeCarMarkerRef.current
   }
 
-  function fitMapToRoute(coordinates: LngLat[]) {
-    const map = mapRef.current
-    if (!map || coordinates.length < 2) return
-
-    const bounds = coordinates.reduce(
-      (acc, coord) => acc.extend(coord as [number, number]),
-      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
-    )
-
-    isProgrammaticMoveRef.current = true
-    map.fitBounds(bounds, {
-      padding: { top: 80, left: 48, right: 48, bottom: 260 },
-      duration: 900,
-    })
-  }
-
   function updateOrderLocally(status: OrderOut['status']) {
     setActiveOrder((current) => (current ? { ...current, status } : current))
   }
@@ -468,12 +577,15 @@ export function BookingPage() {
     }
   }
 
-  function resetSimulationState() {
+  function resetSimulationState(options?: { showDecorativeCars?: boolean; nextPhase?: SimPhase }) {
+    const { showDecorativeCars = true, nextPhase = 'idle' } = options ?? {}
     invalidateSimulation()
-    hideDecorativeCar(activeCarSimulation?.markerIndex ?? null, false)
+    setDecorativeCarsVisible(showDecorativeCars)
     setAssignedDriver(null)
-    setSimPhase('idle')
+    setSimPhase(nextPhase)
     setWaitingSeconds(0)
+    arrivedAtRef.current = null
+    persistWaitingStartedAt(null)
     setApproachRouteCoords([])
     setTripRouteCoords([])
     syncRouteSource(APPROACH_ROUTE_SOURCE_ID, [])
@@ -487,6 +599,7 @@ export function BookingPage() {
     color: string,
     markerIndex: number,
     runId: number,
+    routeSourceId: string,
     onDone: () => void,
   ) {
     if (!coordinates.length) {
@@ -495,7 +608,6 @@ export function BookingPage() {
     }
 
     const startedAt = performance.now()
-    hideDecorativeCar(markerIndex, true)
 
     const step = (now: number) => {
       if (simulationRunIdRef.current !== runId) return
@@ -511,9 +623,14 @@ export function BookingPage() {
       const lat = from[1] + (to[1] - from[1]) * localProgress
       const heading = getHeading(from, to)
       const coordinate: LngLat = [lng, lat]
+      const remainingCoordinates: LngLat[] = [
+        coordinate,
+        ...coordinates.slice(nextIndex),
+      ]
 
       ensureActiveCarMarker(coordinate, heading, color)
-      setActiveCarSimulation({ markerIndex, coordinate, heading })
+      activeCarSimulationRef.current = { markerIndex, coordinate, heading }
+      syncRouteSource(routeSourceId, remainingCoordinates)
 
       if (progress >= 1) {
         simulationFrameRef.current = null
@@ -529,7 +646,7 @@ export function BookingPage() {
   }
 
   useEffect(() => {
-    const locId = getActiveScanLocationId()
+    const locId = initialScanLocationId
 
     Promise.all([locations.get(locId), tariffsApi.list()])
       .then(async ([loc, tList]) => {
@@ -541,9 +658,9 @@ export function BookingPage() {
           const geo = await maps.reverseGeocode(loc.latitude, loc.longitude)
           const addr = [geo.placeName, geo.areaName].filter(Boolean).join(', ')
             || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`
-          setPointA({ address: addr, lat: loc.latitude, lng: loc.longitude })
+          setPointA((current) => current ?? { address: addr, lat: loc.latitude, lng: loc.longitude })
         } catch {
-          setPointA({
+          setPointA((current) => current ?? {
             address: `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`,
             lat: loc.latitude,
             lng: loc.longitude,
@@ -585,7 +702,10 @@ export function BookingPage() {
         prevOrderStatusRef.current = order.status
 
         if (order.status === 'arrived' && arrivedAtRef.current === null) {
-          arrivedAtRef.current = Date.now()
+          const persistedStartedAt = readPersistedWaitingStartedAt()
+          const startedAt = persistedStartedAt ?? Date.now()
+          arrivedAtRef.current = startedAt
+          persistWaitingStartedAt(startedAt)
         }
 
         setActiveOrder(order)
@@ -593,20 +713,24 @@ export function BookingPage() {
           const waitSeconds = arrivedAtRef.current
             ? (Date.now() - arrivedAtRef.current) / 1000
             : 0
+          resetSimulationState({ showDecorativeCars: false, nextPhase: 'completed' })
           setCompletedSummary({
             price: order.price,
             waitSeconds,
             tripSeconds: routeInfoRef.current ? routeInfoRef.current.time / 1000 : null,
           })
+          setRouteInfo(null)
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
           setActiveOrder(null)
           arrivedAtRef.current = null
+          persistWaitingStartedAt(null)
         } else if (order.status === 'cancelled') {
           showStatusNotification('cancelled')
           localStorage.removeItem(ACTIVE_ORDER_KEY)
           setActiveOrderId(null)
           setActiveOrder(null)
+          persistWaitingStartedAt(null)
         }
       } catch {
         // ignore polling errors
@@ -636,6 +760,7 @@ export function BookingPage() {
 
     map.on('load', () => {
       mapLoadedRef.current = true
+      setMapReady(true)
       decorativeMarkersRef.current = DECORATIVE_CAR_COORDINATES.map(([lng, lat], index) => (
         new maplibregl.Marker({
           element: createDecorativeCarElement((index * 29) % 360),
@@ -644,6 +769,7 @@ export function BookingPage() {
           .setLngLat([lng, lat])
           .addTo(map)
       ))
+      setDecorativeCarsVisible(shouldShowDecorativeCars(activeOrder, simPhase, completedSummaryRef.current))
 
       map.addSource('route', {
         type: 'geojson',
@@ -689,6 +815,7 @@ export function BookingPage() {
 
     map.on('movestart', () => {
       if (!isProgrammaticMoveRef.current) {
+        userMapMoveRef.current = true
         setMapDragging(true)
       }
     })
@@ -701,7 +828,10 @@ export function BookingPage() {
       }
       setMapDragging(false)
 
-      if (hasActiveOrderRef.current) return
+      if (!userMapMoveRef.current) return
+      userMapMoveRef.current = false
+
+      if (hasActiveOrderRef.current || completedSummaryRef.current) return
 
       const { lng, lat } = map.getCenter()
       try {
@@ -727,6 +857,7 @@ export function BookingPage() {
       map.remove()
       mapRef.current = null
       mapLoadedRef.current = false
+      setMapReady(false)
       decorativeMarkersRef.current = []
       activeCarMarkerRef.current = null
       markerARef.current = null
@@ -737,8 +868,17 @@ export function BookingPage() {
   // Sync state → refs so pan/marker effects can read current values without stale closures
   useEffect(() => { pointARef.current = pointA }, [pointA])
   useEffect(() => { pointBRef.current = pointB }, [pointB])
+  useEffect(() => { persistPoint(pointAStorageKey, pointA) }, [pointA, pointAStorageKey])
+  useEffect(() => { persistPoint(pointBStorageKey, pointB) }, [pointB, pointBStorageKey])
   useEffect(() => { hasActiveOrderRef.current = !!activeOrderId }, [activeOrderId])
+  useEffect(() => { completedSummaryRef.current = !!completedSummary }, [completedSummary])
   useEffect(() => { routeInfoRef.current = routeInfo }, [routeInfo])
+
+  useEffect(() => {
+    if (pointB) return
+    const destinationPoint = getOrderDestinationPoint(activeOrder)
+    if (destinationPoint) setPointB(destinationPoint)
+  }, [activeOrder, pointB])
 
   // Show/hide maplibre markers:
   // - Normally: only the INACTIVE point has a static marker
@@ -747,9 +887,18 @@ export function BookingPage() {
     const map = mapRef.current
     if (!map) return
 
+    const isCompletedView = !!completedSummary
     const hasActiveOrder = !!activeOrderId
-    const showA = hasActiveOrder ? !!pointA : (isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA))
-    const showB = hasActiveOrder ? !!pointB : (isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB))
+    const showA = isCompletedView
+      ? false
+      : hasActiveOrder
+        ? !!pointA
+        : (isFieldTransitioning ? !!pointA : (activeField !== 'A' && !!pointA))
+    const showB = isCompletedView
+      ? !!pointB
+      : hasActiveOrder
+        ? !!pointB
+        : (isFieldTransitioning ? !!pointB : (activeField !== 'B' && !!pointB))
 
     if (showA && pointA) {
       if (markerARef.current) {
@@ -776,7 +925,7 @@ export function BookingPage() {
       markerBRef.current?.remove()
       markerBRef.current = null
     }
-  }, [activeField, pointA, pointB, isFieldTransitioning, activeOrderId])
+  }, [activeField, pointA, pointB, isFieldTransitioning, activeOrderId, completedSummary])
 
   // When switching active field:
   //   1. isFieldTransitioning=true → floating marker hides, both static markers visible
@@ -807,7 +956,7 @@ export function BookingPage() {
   useEffect(() => {
     const map = mapRef.current
 
-    if (!map || !pointA || !pointB || activeOrderId) {
+    if (!map || !pointA || !pointB || activeOrderId || completedSummary) {
       setRouteInfo(null)
       const src = map?.getSource('route') as maplibregl.GeoJSONSource | undefined
       src?.setData(emptyFeatureCollection())
@@ -835,7 +984,7 @@ export function BookingPage() {
 
     if (mapLoadedRef.current) apply()
     else map.once('load', apply)
-  }, [pointA, pointB, activeOrderId])
+  }, [pointA, pointB, activeOrderId, completedSummary])
 
   useEffect(() => {
     syncRouteSource(APPROACH_ROUTE_SOURCE_ID, approachRouteCoords)
@@ -846,21 +995,165 @@ export function BookingPage() {
   }, [tripRouteCoords])
 
   useEffect(() => {
+    setDecorativeCarsVisible(shouldShowDecorativeCars(activeOrder, simPhase, !!completedSummary))
+  }, [activeOrder, simPhase, completedSummary])
+
+  useEffect(() => {
     if (!activeOrder || simPhase !== 'idle') return
 
-    const preset = resolveDriverPreset(activeOrder.tariff_name)
-    setAssignedDriver(preset)
-
     if (activeOrder.status === 'searching') {
+      setAssignedDriver(null)
       setSimPhase('searchingModal')
     } else if (activeOrder.status === 'assigned') {
+      setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
       setSimPhase('assignedPreview')
     } else if (activeOrder.status === 'driving') {
+      setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
       setSimPhase('approachingPickup')
     } else if (activeOrder.status === 'arrived') {
+      setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
       setSimPhase('waitingAtPickup')
+    } else if (activeOrder.status === 'in_trip') {
+      setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
+      setSimPhase('inTrip')
     }
   }, [activeOrder, simPhase])
+
+  useEffect(() => {
+    if (simPhase !== 'waitingAtPickup') return
+    if (!pointA || !activeOrder) return
+
+    const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
+    const pickupCoordinate: LngLat = [pointA.lng, pointA.lat]
+    ensureActiveCarMarker(pickupCoordinate, 0, driver.carColor)
+    activeCarSimulationRef.current = {
+      markerIndex: pickNearestDecorativeCar(pickupCoordinate),
+      coordinate: pickupCoordinate,
+      heading: 0,
+    }
+    syncRouteSource(APPROACH_ROUTE_SOURCE_ID, [])
+  }, [simPhase, pointA, pointB, activeOrder, assignedDriver])
+
+  useEffect(() => {
+    if (!mapReady || !activeOrder || !pointA) return
+
+    let cancelled = false
+
+    async function restoreAnimatedState() {
+      const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
+      const statusStartedAtMs = getStatusStartedAtMs(activeOrder) ?? Date.now()
+      const elapsedMs = Math.max(Date.now() - statusStartedAtMs, 0)
+
+      if (simPhase === 'approachingPickup' && !activeCarMarkerRef.current && approachRouteCoords.length === 0) {
+        const pickupPoint: LngLat = [pointA.lng, pointA.lat]
+        const markerIndex = pickNearestDecorativeCar(pickupPoint)
+        const start = DECORATIVE_CAR_COORDINATES[markerIndex]
+
+        let coordinates: LngLat[] = [start, pickupPoint]
+        let distance = 0
+
+        try {
+          const route = await maps.route([
+            { latitude: start[1], longitude: start[0] },
+            { latitude: pickupPoint[1], longitude: pickupPoint[0] },
+          ])
+          if (cancelled) return
+          coordinates = route.coordinates as LngLat[]
+          distance = route.distance
+        } catch {
+          if (cancelled) return
+        }
+
+        const duration = clamp((distance || coordinates.length * 25) * 8, SIM_TIMINGS.minApproachMs, SIM_TIMINGS.maxApproachMs)
+        const snapshot = getAnimationSnapshot(coordinates, duration, elapsedMs)
+        if (!snapshot) return
+
+        ensureActiveCarMarker(snapshot.coordinate, snapshot.heading, driver.carColor)
+        activeCarSimulationRef.current = { markerIndex, coordinate: snapshot.coordinate, heading: snapshot.heading }
+        setApproachRouteCoords(snapshot.remainingCoordinates)
+        setTripRouteCoords([])
+
+        if (snapshot.progress >= 1) {
+          setWaitingSeconds(0)
+          setApproachRouteCoords([])
+          await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.waitingAtPickup)
+          setSimPhase('waitingAtPickup')
+          return
+        }
+
+        animateMarkerAlongRoute(
+          snapshot.remainingCoordinates,
+          Math.max(duration - elapsedMs, 1),
+          driver.carColor,
+          markerIndex,
+          ++simulationRunIdRef.current,
+          APPROACH_ROUTE_SOURCE_ID,
+          async () => {
+            if (cancelled) return
+            setWaitingSeconds(0)
+            setApproachRouteCoords([])
+            await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.waitingAtPickup)
+            setSimPhase('waitingAtPickup')
+          },
+        )
+      }
+
+      const destinationPoint = pointB ?? getOrderDestinationPoint(activeOrder)
+      if (simPhase === 'inTrip' && destinationPoint && !activeCarMarkerRef.current && tripRouteCoords.length === 0) {
+        const tripStart: LngLat = [pointA.lng, pointA.lat]
+        const destination: LngLat = [destinationPoint.lng, destinationPoint.lat]
+
+        let coordinates: LngLat[] = [tripStart, destination]
+        let distance = 0
+
+        try {
+          const route = await maps.route([
+            { latitude: tripStart[1], longitude: tripStart[0] },
+            { latitude: destination[1], longitude: destination[0] },
+          ])
+          if (cancelled) return
+          coordinates = route.coordinates as LngLat[]
+          distance = route.distance
+        } catch {
+          if (cancelled) return
+        }
+
+        const duration = clamp((distance || coordinates.length * 30) * 9, SIM_TIMINGS.minTripMs, SIM_TIMINGS.maxTripMs)
+        const snapshot = getAnimationSnapshot(coordinates, duration, elapsedMs)
+        if (!snapshot) return
+
+        const markerIndex = pickNearestDecorativeCar(tripStart)
+        ensureActiveCarMarker(snapshot.coordinate, snapshot.heading, driver.carColor)
+        activeCarSimulationRef.current = { markerIndex, coordinate: snapshot.coordinate, heading: snapshot.heading }
+        setApproachRouteCoords([])
+        setTripRouteCoords(snapshot.remainingCoordinates)
+
+        if (snapshot.progress >= 1) {
+          handleCompleteOrder()
+          return
+        }
+
+        animateMarkerAlongRoute(
+          snapshot.remainingCoordinates,
+          Math.max(duration - elapsedMs, 1),
+          driver.carColor,
+          markerIndex,
+          ++simulationRunIdRef.current,
+          TRIP_ROUTE_SOURCE_ID,
+          () => {
+            if (cancelled) return
+            handleCompleteOrder()
+          },
+        )
+      }
+    }
+
+    restoreAnimatedState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [mapReady, activeOrder, simPhase, pointA, pointB, assignedDriver, approachRouteCoords.length, tripRouteCoords.length])
 
   useEffect(() => {
     clearSimulationTimers()
@@ -871,8 +1164,8 @@ export function BookingPage() {
       const runId = simulationRunIdRef.current
       queueSimulationTimer(async () => {
         if (simulationRunIdRef.current !== runId) return
-        setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
         await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.assignedPreview)
+        setAssignedDriver(resolveDriverPreset(activeOrder.tariff_name))
         setSimPhase('assignedPreview')
       }, SIM_TIMINGS.searchMs)
     }
@@ -907,12 +1200,11 @@ export function BookingPage() {
 
         setApproachRouteCoords(coordinates)
         setTripRouteCoords([])
-        fitMapToRoute(coordinates)
         setSimPhase('approachingPickup')
         await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.approachingPickup)
 
         const duration = clamp((distance || coordinates.length * 25) * 8, SIM_TIMINGS.minApproachMs, SIM_TIMINGS.maxApproachMs)
-        animateMarkerAlongRoute(coordinates, duration, driver.carColor, markerIndex, runId, async () => {
+        animateMarkerAlongRoute(coordinates, duration, driver.carColor, markerIndex, runId, APPROACH_ROUTE_SOURCE_ID, async () => {
           if (simulationRunIdRef.current !== runId) return
           setWaitingSeconds(0)
           setApproachRouteCoords([])
@@ -929,6 +1221,10 @@ export function BookingPage() {
 
   useEffect(() => {
     if (simPhase !== 'waitingAtPickup') return
+    const startedAt = arrivedAtRef.current ?? readPersistedWaitingStartedAt() ?? Date.now()
+    arrivedAtRef.current = startedAt
+    persistWaitingStartedAt(startedAt)
+    setWaitingSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
     const timer = setInterval(() => setWaitingSeconds((current) => current + 1), 1000)
     return () => clearInterval(timer)
   }, [simPhase])
@@ -1049,11 +1345,12 @@ export function BookingPage() {
       localStorage.setItem(ACTIVE_ORDER_KEY, String(order.id))
       prevOrderStatusRef.current = order.status
       requestNotificationPermission()
-      invalidateSimulation()
+      resetSimulationState()
       setActiveOrderId(order.id)
       setActiveOrder(order)
-      setAssignedDriver(resolveDriverPreset(tariff.name))
+      setAssignedDriver(null)
       setWaitingSeconds(0)
+      persistWaitingStartedAt(null)
       setApproachRouteCoords([])
       setTripRouteCoords([])
       setSimPhase('searchingModal')
@@ -1079,6 +1376,7 @@ export function BookingPage() {
     localStorage.removeItem(ACTIVE_ORDER_KEY)
     setActiveOrderId(null)
     setActiveOrder(null)
+    persistWaitingStartedAt(null)
   }
 
   async function handleCompleteOrder() {
@@ -1086,7 +1384,7 @@ export function BookingPage() {
     const waitSeconds = arrivedAtRef.current
       ? (Date.now() - arrivedAtRef.current) / 1000
       : 0
-    resetSimulationState()
+    resetSimulationState({ showDecorativeCars: false, nextPhase: 'completed' })
     try {
       await orders.updateStatus(activeOrder.id, 'completed')
     } catch {
@@ -1097,18 +1395,17 @@ export function BookingPage() {
       waitSeconds,
       tripSeconds: routeInfo ? routeInfo.time / 1000 : null,
     })
+    setRouteInfo(null)
     localStorage.removeItem(ACTIVE_ORDER_KEY)
     setActiveOrderId(null)
     setActiveOrder(null)
     arrivedAtRef.current = null
+    persistWaitingStartedAt(null)
   }
 
   async function handleArrivedAtPickup() {
-    if (!activeOrder || !pointA || simPhase !== 'waitingAtPickup') return
-
-    const destinationLng = pointB?.lng ?? activeOrder.destination_lng
-    const destinationLat = pointB?.lat ?? activeOrder.destination_lat
-    if (destinationLng == null || destinationLat == null) return
+    const destinationPoint = pointB ?? getOrderDestinationPoint(activeOrder)
+    if (!activeOrder || !pointA || !destinationPoint || simPhase !== 'waitingAtPickup') return
 
     const runId = ++simulationRunIdRef.current
     clearSimulationTimers()
@@ -1117,8 +1414,8 @@ export function BookingPage() {
     const driver = assignedDriver ?? resolveDriverPreset(activeOrder.tariff_name)
     setAssignedDriver(driver)
 
-    const tripStart: LngLat = activeCarSimulation?.coordinate ?? [pointA.lng, pointA.lat]
-    const destination: LngLat = [destinationLng, destinationLat]
+    const tripStart: LngLat = activeCarSimulationRef.current?.coordinate ?? [pointA.lng, pointA.lat]
+    const destination: LngLat = [destinationPoint.lng, destinationPoint.lat]
 
     let coordinates: LngLat[] = [tripStart, destination]
     let distance = 0
@@ -1138,7 +1435,6 @@ export function BookingPage() {
 
     setApproachRouteCoords([])
     setTripRouteCoords(coordinates)
-    fitMapToRoute(coordinates)
     setSimPhase('inTrip')
     await syncOrderStatus(SIM_PHASE_TO_ORDER_STATUS.inTrip)
 
@@ -1147,8 +1443,9 @@ export function BookingPage() {
       coordinates,
       duration,
       driver.carColor,
-      activeCarSimulation?.markerIndex ?? pickNearestDecorativeCar(tripStart),
+      activeCarSimulationRef.current?.markerIndex ?? pickNearestDecorativeCar(tripStart),
       runId,
+      TRIP_ROUTE_SOURCE_ID,
       () => {
         handleCompleteOrder()
       },
@@ -1210,7 +1507,7 @@ export function BookingPage() {
         <div ref={mapContainerRef} className="absolute inset-0" />
 
         {/* Floating center marker — hidden during field transition */}
-        {!hasActiveTrip && !isFieldTransitioning && (
+        {!hasActiveTrip && !completedSummary && !isFieldTransitioning && (
           <div className="absolute inset-0 pointer-events-none z-10">
             {/* Shadow dot at map center */}
             <div
@@ -1267,7 +1564,7 @@ export function BookingPage() {
           <ChevronLeftIcon />
         </button>
 
-        {!hasActiveTrip && (
+        {!hasActiveTrip && !completedSummary && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-brand-dark/80 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full whitespace-nowrap pointer-events-none">
             {displayField === 'A'
               ? 'Переместите карту, чтобы изменить точку А'
@@ -1624,6 +1921,7 @@ function TripSlide({
   const currentIdx = STATUS_STEPS.findIndex((s) => s.key === progressStatus)
   const waitingLabel = `${Math.floor(waitingSeconds / 60).toString().padStart(2, '0')}:${(waitingSeconds % 60).toString().padStart(2, '0')}`
   const canCancel = simPhase === 'searchingModal' || simPhase === 'assignedPreview' || simPhase === 'approachingPickup' || simPhase === 'waitingAtPickup'
+  const showDriverCard = !!driver && simPhase !== 'searchingModal'
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
@@ -1663,7 +1961,7 @@ function TripSlide({
         </div>
       </div>
 
-      {driver && (
+      {showDriverCard && (
         <div className="mx-4 mb-3 rounded-xl border border-gray-100 bg-white px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
