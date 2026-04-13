@@ -5,6 +5,7 @@ import { Button } from '@/components/Button'
 
 type PhoneState = 'input' | 'code'
 type PaymentMethod = 'cash' | 'card'
+type Language = 'ru' | 'kk' | 'en'
 
 const RESEND_COOLDOWN_SECONDS = 15
 
@@ -38,9 +39,88 @@ interface CheckoutModalProps {
   onConfirm: () => Promise<void>
   submitting: boolean
   submitError: string
+  language?: Language
 }
 
-export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: CheckoutModalProps) {
+const TEXT = {
+  ru: {
+    close: 'Закрыть',
+    checkout: 'Оформление заказа',
+    choosePayment: 'Выберите способ оплаты',
+    cash: 'Наличные',
+    card: 'Банковская карта',
+    phone: 'Номер телефона',
+    getCode: 'Получить код',
+    changeNumber: 'Изменить номер',
+    smsCode: 'Код из SMS на {{phone}}',
+    change: 'Изменить',
+    demoCode: 'Демо-код',
+    sending: 'Отправляем...',
+    resendAfter: 'Повторить через {{value}}',
+    resend: 'Отправить код повторно',
+    confirm: 'Подтвердить заказ',
+    processing: 'Оформление...',
+    invalidPhone: 'Введите корректный номер телефона',
+    sendCodeError: 'Ошибка отправки кода',
+    invalidCode: 'Введите 4-значный код',
+    wrongCode: 'Неверный код',
+  },
+  kk: {
+    close: 'Жабу',
+    checkout: 'Тапсырысты рәсімдеу',
+    choosePayment: 'Төлем тәсілін таңдаңыз',
+    cash: 'Қолма-қол',
+    card: 'Банк картасы',
+    phone: 'Телефон нөмірі',
+    getCode: 'Код алу',
+    changeNumber: 'Нөмірді өзгерту',
+    smsCode: 'SMS коды: {{phone}}',
+    change: 'Өзгерту',
+    demoCode: 'Демо-код',
+    sending: 'Жіберілуде...',
+    resendAfter: '{{value}} кейін қайталау',
+    resend: 'Кодты қайта жіберу',
+    confirm: 'Тапсырысты растау',
+    processing: 'Рәсімделуде...',
+    invalidPhone: 'Дұрыс телефон нөмірін енгізіңіз',
+    sendCodeError: 'Код жіберу қатесі',
+    invalidCode: '4 таңбалы кодты енгізіңіз',
+    wrongCode: 'Код қате',
+  },
+  en: {
+    close: 'Close',
+    checkout: 'Complete your order',
+    choosePayment: 'Choose a payment method',
+    cash: 'Cash',
+    card: 'Bank card',
+    phone: 'Phone number',
+    getCode: 'Get code',
+    changeNumber: 'Change number',
+    smsCode: 'SMS code sent to {{phone}}',
+    change: 'Change',
+    demoCode: 'Demo code',
+    sending: 'Sending...',
+    resendAfter: 'Resend in {{value}}',
+    resend: 'Send code again',
+    confirm: 'Confirm order',
+    processing: 'Processing...',
+    invalidPhone: 'Enter a valid phone number',
+    sendCodeError: 'Failed to send code',
+    invalidCode: 'Enter a 4-digit code',
+    wrongCode: 'Incorrect code',
+  },
+} as const
+
+function tr(language: Language, key: keyof typeof TEXT.ru, vars?: Record<string, string>) {
+  let value: string = TEXT[language][key]
+  if (!vars) return value
+  for (const [name, part] of Object.entries(vars)) {
+    value = value.split(`{{${name}}}`).join(part)
+  }
+  return value
+}
+
+export function CheckoutModal({ onClose, onConfirm, submitting, submitError, language = 'ru' }: CheckoutModalProps) {
   const { user, login } = useAuth()
 
   const [phone, setPhone] = useState(() => user ? formatPhone(user.phone) : '')
@@ -86,7 +166,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   async function sendCode() {
     const digits = getPhoneDigits(phone)
     if (digits.length < 10) {
-      setPhoneError('Введите корректный номер телефона')
+      setPhoneError(tr(language, 'invalidPhone'))
       return
     }
     setPhoneError('')
@@ -99,25 +179,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
       setPhoneState('code')
       setResendCooldown(RESEND_COOLDOWN_SECONDS)
     } catch (e: any) {
-      setPhoneError(e.message ?? 'Ошибка отправки кода')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function verifyCode() {
-    if (code.length < 4) {
-      setCodeError('Введите 4-значный код')
-      return
-    }
-    setCodeError('')
-    setLoading(true)
-    try {
-      await login(getPhoneDigits(phone), code)
-      isEditingPhone.current = false
-      setVerified(true)
-    } catch (e: any) {
-      setCodeError(e.message ?? 'Неверный код')
+      setPhoneError(e.message ?? tr(language, 'sendCodeError'))
     } finally {
       setLoading(false)
     }
@@ -136,8 +198,8 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
   const phoneReady = getPhoneDigits(phone).length >= 10
 
   const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
-    { id: 'cash', label: 'Наличные', icon: '💵' },
-    { id: 'card', label: 'Банковская карта', icon: '💳' },
+    { id: 'cash', label: tr(language, 'cash'), icon: '💵' },
+    { id: 'card', label: tr(language, 'card'), icon: '💳' },
   ]
 
   return (
@@ -157,13 +219,13 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-text-muted shrink-0"
-            aria-label="Закрыть"
+            aria-label={tr(language, 'close')}
           >
             <ChevronLeftIcon />
           </button>
           <div>
-            <h2 className="text-lg font-bold text-text-primary leading-tight">Оформление заказа</h2>
-            <p className="text-sm text-text-muted mt-0.5">Выберите способ оплаты</p>
+            <h2 className="text-lg font-bold text-text-primary leading-tight">{tr(language, 'checkout')}</h2>
+            <p className="text-sm text-text-muted mt-0.5">{tr(language, 'choosePayment')}</p>
           </div>
         </div>
 
@@ -192,8 +254,8 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
           <div className="flex flex-col gap-2">
             {phoneState === 'input' ? (
               <>
-                <label className="text-sm font-medium text-text-primary">Номер телефона</label>
-                <div className="flex gap-2">
+                <label className="text-sm font-medium text-text-primary">{tr(language, 'phone')}</label>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
                   <input
                     type="tel"
                     placeholder="+7 (___) ___-__-__"
@@ -204,7 +266,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                     }}
                     readOnly={verified && !!user}
                     className={[
-                      'flex-1 h-12 rounded-btn border bg-white px-4',
+                      'min-w-0 w-full h-12 rounded-btn border bg-white px-4',
                       'text-base font-medium text-text-primary placeholder:text-text-muted placeholder:font-normal',
                       'transition-colors outline-none',
                       verified && user ? 'bg-gray-50 text-text-muted cursor-default' : '',
@@ -218,13 +280,13 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                       onClick={sendCode}
                       disabled={!phoneReady || loading}
                       className={[
-                        'h-12 px-4 rounded-btn text-sm font-medium transition-colors shrink-0',
+                        'h-12 px-4 rounded-btn text-sm font-medium transition-colors shrink-0 whitespace-nowrap',
                         phoneReady && !loading
                           ? 'bg-brand-orange text-white'
                           : 'bg-gray-100 text-text-muted cursor-default',
                       ].join(' ')}
                     >
-                      {loading ? '...' : 'Получить код'}
+                      {loading ? '...' : tr(language, 'getCode')}
                     </button>
                   )}
                 </div>
@@ -234,7 +296,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                     onClick={resetPhone}
                     className="text-xs text-brand-orange underline underline-offset-2 self-start"
                   >
-                    Изменить номер
+                    {tr(language, 'changeNumber')}
                   </button>
                 )}
               </>
@@ -242,13 +304,13 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
               <>
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-text-primary">
-                    Код из SMS на {phone}
+                    {tr(language, 'smsCode', { phone })}
                   </label>
                   <button
                     onClick={resetPhone}
                     className="text-xs text-brand-orange underline underline-offset-2"
                   >
-                    Изменить
+                    {tr(language, 'change')}
                   </button>
                 </div>
                 <input
@@ -270,7 +332,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                       setLoading(true)
                       login(getPhoneDigits(phone), val)
                         .then(() => { isEditingPhone.current = false; setVerified(true) })
-                        .catch((err: any) => setCodeError(err.message ?? 'Неверный код'))
+                        .catch((err: any) => setCodeError(err.message ?? tr(language, 'wrongCode')))
                         .finally(() => setLoading(false))
                     }
                   }}
@@ -288,7 +350,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
 
                 {generatedCode && (
                   <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface-warm border border-brand-muted">
-                    <span className="text-xs text-text-muted">Демо-код</span>
+                    <span className="text-xs text-text-muted">{tr(language, 'demoCode')}</span>
                     <span className="text-base font-bold tracking-[0.25em] text-brand-orange">{generatedCode}</span>
                   </div>
                 )}
@@ -299,17 +361,17 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError }: C
                   className="text-xs text-text-muted text-center underline underline-offset-2 disabled:no-underline disabled:opacity-50 self-center"
                 >
                   {loading
-                    ? 'Отправляем...'
+                    ? tr(language, 'sending')
                     : resendCooldown > 0
-                      ? `Повторить через ${formatCooldown(resendCooldown)}`
-                      : 'Отправить код повторно'}
+                      ? tr(language, 'resendAfter', { value: formatCooldown(resendCooldown) })
+                      : tr(language, 'resend')}
                 </button>
               </>
             )}
           </div>
 
           <Button onClick={onConfirm} disabled={!verified || submitting}>
-            {submitting ? 'Оформление...' : 'Подтвердить заказ'}
+            {submitting ? tr(language, 'processing') : tr(language, 'confirm')}
           </Button>
           {submitError && <p className="text-xs text-red-500 text-center">{submitError}</p>}
         </div>
