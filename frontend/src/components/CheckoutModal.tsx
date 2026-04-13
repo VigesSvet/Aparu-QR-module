@@ -40,6 +40,8 @@ interface CheckoutModalProps {
   submitting: boolean
   submitError: string
   language?: Language
+  /** When true the user arrived via Telegram Mini App — skip phone/SMS section. */
+  isTMA?: boolean
 }
 
 const TEXT = {
@@ -120,12 +122,13 @@ function tr(language: Language, key: keyof typeof TEXT.ru, vars?: Record<string,
   return value
 }
 
-export function CheckoutModal({ onClose, onConfirm, submitting, submitError, language = 'ru' }: CheckoutModalProps) {
+export function CheckoutModal({ onClose, onConfirm, submitting, submitError, language = 'ru', isTMA = false }: CheckoutModalProps) {
   const { user, login } = useAuth()
 
   const [phone, setPhone] = useState(() => user ? formatPhone(user.phone) : '')
   const [phoneState, setPhoneState] = useState<PhoneState>('input')
-  const [verified, setVerified] = useState(() => !!user)
+  // In TMA mode the user is pre-authenticated via Telegram — treat as verified.
+  const [verified, setVerified] = useState(() => !!user || isTMA)
   const [code, setCode] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
   const [phoneError, setPhoneError] = useState('')
@@ -250,7 +253,8 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError, lan
             ))}
           </div>
 
-          {/* Phone / Code section */}
+          {/* Phone / Code section — hidden in TMA (user is pre-authenticated) */}
+          {!isTMA && (
           <div className="flex flex-col gap-2">
             {phoneState === 'input' ? (
               <>
@@ -369,6 +373,7 @@ export function CheckoutModal({ onClose, onConfirm, submitting, submitError, lan
               </>
             )}
           </div>
+          )}
 
           <Button onClick={onConfirm} disabled={!verified || submitting}>
             {submitting ? tr(language, 'processing') : tr(language, 'confirm')}

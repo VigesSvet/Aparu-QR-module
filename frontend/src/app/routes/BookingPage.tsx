@@ -15,7 +15,8 @@ import { CheckoutModal } from '@/components/CheckoutModal'
 import { FlappyCarGame } from '@/components/FlappyCarGame'
 import { TourismBottomSheet } from '@/components/TourismBottomSheet'
 import { BotBridge, type BotBridgeContext } from '@/components/BotBridge'
-import { getActiveScanLocationId, getRepeatScanPath } from '@/lib/scanContext'
+import { getActiveScanLocationId, getRepeatScanPath, saveScanLocation } from '@/lib/scanContext'
+import { useTelegram } from '@/hooks/useTelegram'
 
 type LngLat = [number, number]
 
@@ -768,6 +769,10 @@ function readPersistedPoint(storageKey: string): Point | null {
 
 export function BookingPage() {
   const navigate = useNavigate()
+
+  // ── Telegram Mini App integration ─────────────────────────────────────────
+  const { tg, isTMA, tgUser, startParam, themeParams } = useTelegram()
+
   const initialScanLocationId = getActiveScanLocationId()
   const pointAStorageKey = getPersistedPointAKey(initialScanLocationId)
   const pointBStorageKey = getPersistedPointBKey(initialScanLocationId)
@@ -1287,6 +1292,53 @@ export function BookingPage() {
   useEffect(() => { completedSummaryRef.current = !!completedSummary }, [completedSummary])
   useEffect(() => { routeInfoRef.current = routeInfo }, [routeInfo])
 
+  // ── TMA: parse deep-link start_param ──────────────────────────────────────
+  // Format: qr_42  →  location ID 42
+  // When the user opens the Mini App from a bot link that carries a QR
+  // location, we pre-select that location so point A is set automatically.
+  useEffect(() => {
+    if (!isTMA || !startParam) return
+    if (!startParam.startsWith('qr_')) return
+    const idStr = startParam.slice(3)
+    const id = parseInt(idStr, 10)
+    if (!Number.isNaN(id) && id > 0) saveScanLocation(id)
+    // The existing data-loading effect re-reads getActiveScanLocationId()
+    // from sessionStorage, so no explicit reload is needed.
+  }, [isTMA, startParam])
+
+  // ── TMA: set language from Telegram user locale ───────────────────────────
+  useEffect(() => {
+    if (!isTMA || !tgUser?.language_code) return
+    const lc = tgUser.language_code.toLowerCase()
+    if (lc === 'kk' || lc === 'kz') setLanguage('kk')
+    else if (lc === 'en') setLanguage('en')
+    else setLanguage('ru')
+  }, [isTMA, tgUser])
+
+  // ── TMA: wire MainButton click (stable handler via ref) ───────────────────
+  // We register the click handler once so the same function reference can be
+  // removed in the cleanup. The ref always holds the latest handleConfirm.
+  const handleConfirmRef = useRef<() => void>(() => {})
+
+  // Keep ref up-to-date on every render (no dependency array needed)
+  useEffect(() => {
+    handleConfirmRef.current = handleConfirm
+  })
+
+  useEffect(() => {
+    if (!isTMA || !tg) return
+    tg.MainButton.setParams({ color: '#FC6500', text_color: '#FFFFFF' })
+    const handler = () => handleConfirmRef.current()
+    tg.MainButton.onClick(handler)
+    return () => {
+      tg.MainButton.offClick(handler)
+      tg.MainButton.hide()
+    }
+  }, [isTMA, tg]) // intentionally runs once
+
+  // NOTE: The reactive MainButton show/hide effect lives after the derived
+  // consts (hasActiveTrip, tariff, selectedTariffPrice) further below.
+
   useEffect(() => {
     if (pointB) return
     const destinationPoint = getOrderDestinationPoint(activeOrder)
@@ -1722,7 +1774,13 @@ export function BookingPage() {
   function handleConfirm() {
     if (!pointA || !pointB || !tariff) return
     setSubmitError('')
-    setCheckoutOpen(true)
+    // In TMA mode, if the user is already authenticated (token from tg-login),
+    // skip the checkout modal and go straight to order creation.
+    if (isTMA && getToken()) {
+      handleCreateOrder()
+    } else {
+      setCheckoutOpen(true)
+    }
   }
 
   async function handleCreateOrder() {
@@ -1856,6 +1914,25 @@ export function BookingPage() {
   const hasActiveTrip = !!activeOrder
   const searchSimulationOpen = simPhase === 'searchingModal'
 
+  // ── TMA: show/hide + label MainButton reactively ──────────────────────────
+  // Placed here so hasActiveTrip, tariff, and selectedTariffPrice are in scope.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!isTMA || !tg) return
+    const mb = tg.MainButton
+    const canOrder = !hasActiveTrip && !completedSummary && !!pointA && !!pointB && !!tariff && !checkoutOpen
+    if (canOrder) {
+      const label = selectedTariffPrice && tariff
+        ? `Заказать за ${formatPrice(selectedTariffPrice, tariff.currency, language)}`
+        : t(language, 'orderTaxi')
+      mb.setText(label)
+      submitting ? mb.disable() : mb.enable()
+      mb.show()
+    } else {
+      mb.hide()
+    }
+  }, [isTMA, tg, hasActiveTrip, completedSummary, pointA, pointB, tariff, checkoutOpen, selectedTariffPrice, language, submitting])
+
   if (dataLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1901,7 +1978,10 @@ export function BookingPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
+    <div
+      className="flex flex-col h-screen overflow-hidden bg-white"
+      style={themeParams?.bg_color ? { backgroundColor: themeParams.bg_color } : undefined}
+    >
       <div className="relative flex-1 min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
 
@@ -2325,6 +2405,7 @@ export function BookingPage() {
           submitting={submitting}
           submitError={submitError}
           language={language}
+          isTMA={isTMA}
         />
       )}
 

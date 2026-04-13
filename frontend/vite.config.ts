@@ -11,6 +11,9 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Allow all external hostnames so ngrok tunnels work without
+    // "blocked request" errors from Vite's host-header check.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
